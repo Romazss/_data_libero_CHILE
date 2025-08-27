@@ -1,0 +1,22 @@
+# R
+.Rhistory
+.RData
+.Rproj.user/
+*.Rproj
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+
+# Node
+node_modules/
+npm-debug.log*
+
+# OS / misc
+.DS_Store
+*.swp
+*~
