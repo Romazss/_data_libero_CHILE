@@ -1,51 +1,182 @@
-<!-- /web_app/frontend/index.html -->
+<!-- /web_app/frontend/index.html - Fase 2 -->
 <!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Biblioteca de Datos Abiertos de Chile — Estado de Datasets</title>
+  <title>Biblioteca de Datos Abiertos de Chile — Portal de Monitoreo</title>
   <link rel="stylesheet" href="style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🇨🇱</text></svg>">
 </head>
 <body>
+  <!-- Header mejorado -->
   <header class="container">
-    <h1>Estado de Datasets</h1>
-    <p class="subtitle">Lectura de <code>sources.yaml</code> y disponibilidad en tiempo real</p>
+    <div class="header-content">
+      <div class="title-section">
+        <h1>🇨🇱 Biblioteca de Datos Abiertos</h1>
+        <p class="subtitle">Monitoreo en tiempo real de datasets públicos de Chile</p>
+      </div>
+      
+      <div class="stats-summary" id="statsSummary">
+        <div class="stat-card">
+          <span class="stat-number" id="totalDatasets">-</span>
+          <span class="stat-label">Datasets</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-number" id="availableDatasets">-</span>
+          <span class="stat-label">Disponibles</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-number" id="avgLatency">-</span>
+          <span class="stat-label">Latencia promedio</span>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Toolbar expandida -->
     <div class="toolbar">
-      <button id="refreshBtn">Actualizar</button>
-      <label>
-        Auto-refresco
-        <select id="autoRefresh">
-          <option value="0">Off</option>
-          <option value="30">30s</option>
-          <option value="60" selected>60s</option>
-          <option value="300">5min</option>
-        </select>
-      </label>
+      <div class="toolbar-section">
+        <button id="refreshBtn" class="btn btn-primary">
+          <span class="btn-icon">🔄</span>
+          Actualizar
+        </button>
+        
+        <button id="forceCheckBtn" class="btn btn-secondary">
+          <span class="btn-icon">⚡</span>
+          Verificar Ahora
+        </button>
+      </div>
+      
+      <div class="toolbar-section">
+        <label class="input-group">
+          <span>Categoría:</span>
+          <select id="categoryFilter">
+            <option value="">Todas</option>
+          </select>
+        </label>
+        
+        <label class="input-group">
+          <span>Estado:</span>
+          <select id="statusFilter">
+            <option value="">Todos</option>
+            <option value="up">Disponibles</option>
+            <option value="down">No disponibles</option>
+          </select>
+        </label>
+      </div>
+      
+      <div class="toolbar-section">
+        <label class="input-group">
+          <span>Auto-refresco:</span>
+          <select id="autoRefresh">
+            <option value="0">Off</option>
+            <option value="30">30s</option>
+            <option value="60" selected>60s</option>
+            <option value="300">5min</option>
+          </select>
+        </label>
+      </div>
     </div>
   </header>
 
+  <!-- Main content -->
   <main class="container">
-    <div id="stats" class="stats"></div>
-    <table id="table" class="table">
-      <thead>
-        <tr>
-          <th>Dataset</th>
-          <th>Categoría</th>
-          <th>Estado</th>
-          <th>Latencia</th>
-          <th>HTTP</th>
-        </tr>
-      </thead>
-      <tbody id="tbody"></tbody>
-    </table>
-    <p id="error" class="error"></p>
+    <!-- Indicador de carga -->
+    <div id="loadingIndicator" class="loading-indicator hidden">
+      <div class="spinner"></div>
+      <span>Cargando datos...</span>
+    </div>
+    
+    <!-- Tabla de datasets -->
+    <div class="table-container">
+      <table id="table" class="table">
+        <thead>
+          <tr>
+            <th>Dataset</th>
+            <th>Categoría</th>
+            <th>Estado</th>
+            <th>Latencia</th>
+            <th>HTTP</th>
+            <th>Última verificación</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    
+    <!-- Mensaje de error -->
+    <div id="error" class="error hidden"></div>
+    
+    <!-- Mensaje cuando no hay datos -->
+    <div id="noData" class="no-data hidden">
+      <div class="no-data-content">
+        <span class="no-data-icon">📊</span>
+        <h3>No hay datos disponibles</h3>
+        <p>No se encontraron datasets que coincidan con los filtros aplicados.</p>
+        <button id="clearFiltersBtn" class="btn btn-primary">Limpiar filtros</button>
+      </div>
+    </div>
   </main>
 
+  <!-- Footer -->
   <footer class="container footer">
-    <small>Fase 2 · MVP · <a href="https://github.com" target="_blank" rel="noreferrer">Repositorio</a></small>
+    <div class="footer-content">
+      <div class="footer-section">
+        <small>
+          Fase 2 · API Robusta · 
+          <a href="https://github.com/Romazss/_data_libero_CHILE" target="_blank" rel="noreferrer">
+            Repositorio GitHub
+          </a>
+        </small>
+      </div>
+      
+      <div class="footer-section">
+        <div class="api-status" id="apiStatus">
+          <span class="status-indicator" id="statusIndicator"></span>
+          <span id="statusText">Conectando...</span>
+        </div>
+      </div>
+      
+      <div class="footer-section">
+        <span id="lastUpdated" class="last-updated">-</span>
+      </div>
+    </div>
   </footer>
+
+  <!-- Modal para histórico de dataset -->
+  <div id="historyModal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="modalTitle">Histórico del Dataset</h3>
+        <button id="closeModal" class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="history-controls">
+          <label>
+            Período:
+            <select id="historyPeriod">
+              <option value="1">Última hora</option>
+              <option value="6">Últimas 6 horas</option>
+              <option value="24" selected>Último día</option>
+              <option value="168">Última semana</option>
+            </select>
+          </label>
+        </div>
+        <div id="historyContent" class="history-content">
+          <div class="loading-indicator">
+            <div class="spinner"></div>
+            <span>Cargando histórico...</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Overlay para modal -->
+  <div id="modalOverlay" class="modal-overlay hidden"></div>
 
   <script src="app.js"></script>
 </body>
+</html>
 </html>

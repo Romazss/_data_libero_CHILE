@@ -1,68 +1,574 @@
-// app.js
+// app.js - Fase 2
 // /web_app/frontend/app.js
-const API = (location.hostname === "localhost" || location.hostname === "127.0.0.1")
-  ? "http://localhost:5001"
-  : window.location.origin.replace(/:\d+$/, ""); // naive, ajusta si usas proxy
+/**
+ * Frontend JavaScript para la Biblioteca de Datos Abiertos de Chile - Fase 2
+ * Interfaz completa con filtros, búsqueda, histórico y monitoreo en tiempo real
+ */
 
-const tbody = document.getElementById("tbody");
-const errBox = document.getElementById("error");
-const stats = document.getElementById("stats");
-const refreshBtn = document.getElementById("refreshBtn");
-const autoSel = document.getElementById("autoRefresh");
-
-let timer = null;
-
-async function loadStatus() {
-  errBox.textContent = "";
-  tbody.innerHTML = `<tr><td colspan="5">Cargando…</td></tr>`;
-  try {
-    const res = await fetch(`${API}/status`, { cache: "no-store" });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-
-    const items = data.results || [];
-    tbody.innerHTML = items.map(row => {
-      const badgeCls = row.status === "up" ? "badge up" : "badge down";
-      const badgeText = row.status === "up" ? "Disponible" : "Caído";
-      const latency = row.latency_ms != null ? `${row.latency_ms} ms` : "—";
-      const http = row.http_code != null ? row.http_code : (row.error || "—");
-      return `
-        <tr>
-          <td><a href="${row.url}" target="_blank" rel="noreferrer">${escapeHtml(row.name)}</a></td>
-          <td>${escapeHtml(row.category)}</td>
-          <td><span class="${badgeCls}">${badgeText}</span></td>
-          <td>${latency}</td>
-          <td>${http}</td>
-        </tr>
+class ChileDataApp {
+  constructor() {
+    this.API_BASE = this.detectApiUrl();
+    this.cache = new Map();
+    this.filters = {
+      category: '',
+      status: ''
+    };
+    this.autoRefreshTimer = null;
+    this.isLoading = false;
+    
+    // Referencias a elementos DOM
+    this.elements = {
+      // Stats
+      totalDatasets: document.getElementById('totalDatasets'),
+      availableDatasets: document.getElementById('availableDatasets'),
+      avgLatency: document.getElementById('avgLatency'),
+      
+      // Controls
+      refreshBtn: document.getElementById('refreshBtn'),
+      forceCheckBtn: document.getElementById('forceCheckBtn'),
+      categoryFilter: document.getElementById('categoryFilter'),
+      statusFilter: document.getElementById('statusFilter'),
+      autoRefresh: document.getElementById('autoRefresh'),
+      clearFiltersBtn: document.getElementById('clearFiltersBtn'),
+      
+      // Content
+      loadingIndicator: document.getElementById('loadingIndicator'),
+      tbody: document.getElementById('tbody'),
+      error: document.getElementById('error'),
+      noData: document.getElementById('noData'),
+      
+      // Footer
+      apiStatus: document.getElementById('apiStatus'),
+      statusIndicator: document.getElementById('statusIndicator'),
+      statusText: document.getElementById('statusText'),
+      lastUpdated: document.getElementById('lastUpdated'),
+      
+      // Modal
+      historyModal: document.getElementById('historyModal'),
+      modalOverlay: document.getElementById('modalOverlay'),
+      modalTitle: document.getElementById('modalTitle'),
+      closeModal: document.getElementById('closeModal'),
+      historyPeriod: document.getElementById('historyPeriod'),
+      historyContent: document.getElementById('historyContent')
+    };
+    
+    this.init();
+  }
+  
+  detectApiUrl() {
+    const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1";
+    return isLocal ? "http://localhost:5001" : window.location.origin;
+  }
+  
+  init() {
+    this.setupEventListeners();
+    this.loadInitialData();
+    this.checkApiHealth();
+    this.setupAutoRefresh();
+  }
+  
+  setupEventListeners() {
+    // Botones principales
+    this.elements.refreshBtn.addEventListener('click', () => this.loadStatus());
+    this.elements.forceCheckBtn.addEventListener('click', () => this.forceCheck());
+    
+    // Filtros
+    this.elements.categoryFilter.addEventListener('change', (e) => {
+      this.filters.category = e.target.value;
+      this.applyFilters();
+    });
+    
+    this.elements.statusFilter.addEventListener('change', (e) => {
+      this.filters.status = e.target.value;
+      this.applyFilters();
+    });
+    
+    this.elements.clearFiltersBtn.addEventListener('click', () => this.clearFilters());
+    
+    // Auto-refresh
+    this.elements.autoRefresh.addEventListener('change', (e) => {
+      this.setupAutoRefresh();
+    });
+    
+    // Modal
+    this.elements.closeModal.addEventListener('click', () => this.closeModal());
+    this.elements.modalOverlay.addEventListener('click', () => this.closeModal());
+    this.elements.historyPeriod.addEventListener('change', () => this.loadCurrentHistory());
+    
+    // Escape key para cerrar modal
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') this.closeModal();
+    });
+  }
+  
+  async loadInitialData() {
+    try {
+      // Cargar categorías para el filtro
+      await this.loadCategories();
+      
+      // Cargar estado inicial
+      await this.loadStatus();
+      
+      // Cargar estadísticas
+      await this.loadStats();
+      
+    } catch (error) {
+      console.error('Error loading initial data:', error);
+      this.showError('Error cargando datos iniciales');
+    }
+  }
+  
+  async loadCategories() {
+    try {
+      const response = await this.apiCall('/categories');
+      const data = await response.json();
+      
+      if (response.ok) {
+        this.populateCategoryFilter(data.categories);
+      }
+    } catch (error) {
+      console.warn('Error loading categories:', error);
+    }
+  }
+  
+  populateCategoryFilter(categories) {
+    const select = this.elements.categoryFilter;
+    
+    // Limpiar opciones existentes (excepto "Todas")
+    while (select.children.length > 1) {
+      select.removeChild(select.lastChild);
+    }
+    
+    // Agregar categorías
+    categories.forEach(category => {
+      const option = document.createElement('option');
+      option.value = category.name;
+      option.textContent = `${category.name} (${category.count})`;
+      select.appendChild(option);
+    });
+  }
+  
+  async loadStatus() {
+    if (this.isLoading) return;
+    
+    try {
+      this.setLoading(true);
+      this.hideError();
+      
+      const response = await this.apiCall('/status');
+      const data = await response.json();
+      
+      if (response.ok) {
+        this.displayDatasets(data.results);
+        this.updateLastUpdated(data.last_updated);
+        this.updateApiStatus('connected');
+      } else {
+        throw new Error(data.error || 'Error loading status');
+      }
+      
+    } catch (error) {
+      console.error('Error loading status:', error);
+      this.showError(`Error cargando estado: ${error.message}`);
+      this.updateApiStatus('error');
+    } finally {
+      this.setLoading(false);
+    }
+  }
+  
+  async loadStats() {
+    try {
+      const response = await this.apiCall('/stats');
+      const data = await response.json();
+      
+      if (response.ok) {
+        this.updateStatsDisplay(data.stats);
+      }
+    } catch (error) {
+      console.warn('Error loading stats:', error);
+    }
+  }
+  
+  async forceCheck() {
+    try {
+      this.elements.forceCheckBtn.disabled = true;
+      this.elements.forceCheckBtn.innerHTML = '<span class="btn-icon">⏳</span> Verificando...';
+      
+      const response = await this.apiCall('/check', { method: 'POST' });
+      const data = await response.json();
+      
+      if (response.ok) {
+        // Esperar un momento y recargar
+        setTimeout(() => this.loadStatus(), 2000);
+        this.showSuccess('Verificación forzada iniciada');
+      } else {
+        throw new Error(data.error || 'Error forcing check');
+      }
+      
+    } catch (error) {
+      console.error('Error forcing check:', error);
+      this.showError(`Error forzando verificación: ${error.message}`);
+    } finally {
+      setTimeout(() => {
+        this.elements.forceCheckBtn.disabled = false;
+        this.elements.forceCheckBtn.innerHTML = '<span class="btn-icon">⚡</span> Verificar Ahora';
+      }, 3000);
+    }
+  }
+  
+  displayDatasets(datasets) {
+    if (!datasets || datasets.length === 0) {
+      this.showNoData();
+      return;
+    }
+    
+    this.elements.noData.classList.add('hidden');
+    
+    const tbody = this.elements.tbody;
+    tbody.innerHTML = '';
+    
+    datasets.forEach(dataset => {
+      const row = this.createDatasetRow(dataset);
+      tbody.appendChild(row);
+    });
+    
+    this.applyFilters();
+  }
+  
+  createDatasetRow(dataset) {
+    const row = document.createElement('tr');
+    row.dataset.category = dataset.category;
+    row.dataset.status = dataset.status;
+    
+    const statusBadge = this.createStatusBadge(dataset.status);
+    const latency = dataset.latency_ms ? `${dataset.latency_ms}ms` : '—';
+    const httpCode = dataset.http_code || dataset.error || '—';
+    const lastCheck = dataset.checked_at ? this.formatDate(dataset.checked_at) : '—';
+    
+    row.innerHTML = `
+      <td>
+        <a href="${dataset.url}" target="_blank" rel="noreferrer" title="Abrir fuente original">
+          ${this.escapeHtml(dataset.name)}
+        </a>
+      </td>
+      <td>
+        <span class="category-tag">${this.escapeHtml(dataset.category)}</span>
+      </td>
+      <td>${statusBadge}</td>
+      <td>${latency}</td>
+      <td>${httpCode}</td>
+      <td class="text-muted">${lastCheck}</td>
+      <td>
+        <button class="btn btn-secondary btn-sm" onclick="app.showHistory('${dataset.id}', '${this.escapeHtml(dataset.name)}')">
+          📊 Histórico
+        </button>
+      </td>
+    `;
+    
+    return row;
+  }
+  
+  createStatusBadge(status) {
+    const statusMap = {
+      'up': { text: 'Disponible', class: 'up', icon: '✅' },
+      'down': { text: 'No disponible', class: 'down', icon: '❌' },
+      'unknown': { text: 'Desconocido', class: 'unknown', icon: '❓' }
+    };
+    
+    const info = statusMap[status] || statusMap.unknown;
+    return `<span class="badge ${info.class}">${info.icon} ${info.text}</span>`;
+  }
+  
+  applyFilters() {
+    const rows = this.elements.tbody.querySelectorAll('tr');
+    let visibleCount = 0;
+    
+    rows.forEach(row => {
+      const matchesCategory = !this.filters.category || 
+        row.dataset.category === this.filters.category;
+      const matchesStatus = !this.filters.status || 
+        row.dataset.status === this.filters.status;
+      
+      if (matchesCategory && matchesStatus) {
+        row.style.display = '';
+        visibleCount++;
+      } else {
+        row.style.display = 'none';
+      }
+    });
+    
+    if (visibleCount === 0 && rows.length > 0) {
+      this.showNoData();
+    } else {
+      this.elements.noData.classList.add('hidden');
+    }
+  }
+  
+  clearFilters() {
+    this.filters.category = '';
+    this.filters.status = '';
+    this.elements.categoryFilter.value = '';
+    this.elements.statusFilter.value = '';
+    this.applyFilters();
+  }
+  
+  async showHistory(datasetId, datasetName) {
+    this.elements.modalTitle.textContent = `Histórico: ${datasetName}`;
+    this.elements.historyModal.dataset.datasetId = datasetId;
+    this.showModal();
+    await this.loadCurrentHistory();
+  }
+  
+  async loadCurrentHistory() {
+    const datasetId = this.elements.historyModal.dataset.datasetId;
+    const hours = this.elements.historyPeriod.value;
+    
+    if (!datasetId) return;
+    
+    try {
+      this.elements.historyContent.innerHTML = `
+        <div class="loading-indicator">
+          <div class="spinner"></div>
+          <span>Cargando histórico...</span>
+        </div>
       `;
-    }).join("");
-
-    const up = items.filter(x => x.status === "up").length;
-    const down = items.length - up;
-    stats.textContent = `Datasets: ${items.length} · Disponibles: ${up} · Caídos: ${down}`;
-  } catch (e) {
-    errBox.textContent = `Error al cargar /status: ${e.message}`;
-    tbody.innerHTML = "";
+      
+      const response = await this.apiCall(`/datasets/${datasetId}/history?hours=${hours}`);
+      const data = await response.json();
+      
+      if (response.ok) {
+        this.displayHistory(data.history);
+      } else {
+        throw new Error(data.error || 'Error loading history');
+      }
+      
+    } catch (error) {
+      console.error('Error loading history:', error);
+      this.elements.historyContent.innerHTML = `
+        <div class="error">Error cargando histórico: ${error.message}</div>
+      `;
+    }
+  }
+  
+  displayHistory(history) {
+    if (!history || history.length === 0) {
+      this.elements.historyContent.innerHTML = `
+        <div class="no-data">
+          <p>No hay datos históricos disponibles para el período seleccionado.</p>
+        </div>
+      `;
+      return;
+    }
+    
+    const table = document.createElement('table');
+    table.className = 'table';
+    table.innerHTML = `
+      <thead>
+        <tr>
+          <th>Fecha/Hora</th>
+          <th>Estado</th>
+          <th>Latencia</th>
+          <th>Código HTTP</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${history.map(entry => `
+          <tr>
+            <td>${this.formatDate(entry.checked_at)}</td>
+            <td>${this.createStatusBadge(entry.status)}</td>
+            <td>${entry.latency_ms ? `${entry.latency_ms}ms` : '—'}</td>
+            <td>${entry.http_code || entry.error || '—'}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    `;
+    
+    this.elements.historyContent.innerHTML = '';
+    this.elements.historyContent.appendChild(table);
+  }
+  
+  showModal() {
+    this.elements.historyModal.classList.remove('hidden');
+    this.elements.modalOverlay.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+  }
+  
+  closeModal() {
+    this.elements.historyModal.classList.add('hidden');
+    this.elements.modalOverlay.classList.add('hidden');
+    document.body.style.overflow = '';
+  }
+  
+  updateStatsDisplay(stats) {
+    this.elements.totalDatasets.textContent = stats.total_datasets || '—';
+    this.elements.availableDatasets.textContent = stats.successful_checks || '—';
+    this.elements.avgLatency.textContent = stats.avg_latency ? 
+      `${Math.round(stats.avg_latency)}ms` : '—';
+  }
+  
+  setupAutoRefresh() {
+    if (this.autoRefreshTimer) {
+      clearInterval(this.autoRefreshTimer);
+      this.autoRefreshTimer = null;
+    }
+    
+    const seconds = parseInt(this.elements.autoRefresh.value, 10);
+    if (seconds > 0) {
+      this.autoRefreshTimer = setInterval(() => {
+        this.loadStatus();
+        this.loadStats();
+      }, seconds * 1000);
+    }
+  }
+  
+  async checkApiHealth() {
+    try {
+      const response = await this.apiCall('/health');
+      if (response.ok) {
+        this.updateApiStatus('connected');
+      } else {
+        this.updateApiStatus('error');
+      }
+    } catch (error) {
+      this.updateApiStatus('error');
+    }
+  }
+  
+  updateApiStatus(status) {
+    const statusMap = {
+      'connected': { text: 'API Conectada', class: '' },
+      'error': { text: 'API Desconectada', class: 'error' },
+      'warning': { text: 'API Lenta', class: 'warning' }
+    };
+    
+    const info = statusMap[status] || statusMap.error;
+    this.elements.statusText.textContent = info.text;
+    this.elements.statusIndicator.className = `status-indicator ${info.class}`;
+  }
+  
+  updateLastUpdated(timestamp) {
+    if (timestamp) {
+      const date = new Date(timestamp);
+      this.elements.lastUpdated.textContent = `Actualizado: ${this.formatDate(date)}`;
+    }
+  }
+  
+  async apiCall(endpoint, options = {}) {
+    const url = `${this.API_BASE}${endpoint}`;
+    const defaultOptions = {
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache'
+      }
+    };
+    
+    return fetch(url, { ...defaultOptions, ...options });
+  }
+  
+  setLoading(loading) {
+    this.isLoading = loading;
+    if (loading) {
+      this.elements.loadingIndicator.classList.remove('hidden');
+      this.elements.refreshBtn.disabled = true;
+    } else {
+      this.elements.loadingIndicator.classList.add('hidden');
+      this.elements.refreshBtn.disabled = false;
+    }
+  }
+  
+  showError(message) {
+    this.elements.error.textContent = message;
+    this.elements.error.classList.remove('hidden');
+    setTimeout(() => this.hideError(), 5000);
+  }
+  
+  hideError() {
+    this.elements.error.classList.add('hidden');
+  }
+  
+  showSuccess(message) {
+    // Crear notificación temporal de éxito
+    const notification = document.createElement('div');
+    notification.className = 'success-notification';
+    notification.textContent = message;
+    notification.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: var(--success-bg);
+      border: 1px solid var(--success-border);
+      color: var(--success);
+      padding: var(--spacing-md);
+      border-radius: var(--radius-md);
+      z-index: 1002;
+      animation: slideIn 0.3s ease;
+    `;
+    
+    document.body.appendChild(notification);
+    setTimeout(() => {
+      notification.remove();
+    }, 3000);
+  }
+  
+  showNoData() {
+    this.elements.noData.classList.remove('hidden');
+    this.elements.tbody.innerHTML = '';
+  }
+  
+  formatDate(dateString) {
+    const date = new Date(dateString);
+    return date.toLocaleString('es-CL', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  }
+  
+  escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
 }
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, m => ({
-    "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"
-  }[m]));
-}
-
-refreshBtn.addEventListener("click", loadStatus);
-
-autoSel.addEventListener("change", () => {
-  if (timer) { clearInterval(timer); timer = null; }
-  const secs = parseInt(autoSel.value, 10);
-  if (secs > 0) {
-    timer = setInterval(loadStatus, secs * 1000);
+// Agregar estilos para animaciones
+const style = document.createElement('style');
+style.textContent = `
+  @keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
   }
-});
+  
+  .btn-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+  }
+  
+  .category-tag {
+    display: inline-block;
+    padding: 0.125rem 0.5rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    text-transform: capitalize;
+  }
+`;
+document.head.appendChild(style);
 
-loadStatus(); // primera carga
-if (parseInt(autoSel.value, 10) > 0) {
-  timer = setInterval(loadStatus, parseInt(autoSel.value, 10) * 1000);
+// Inicializar aplicación
+const app = new ChileDataApp();
+
+// Primera carga
+app.loadStatus();
+
+// Auto-refresh inicial si está configurado
+const initialRefresh = parseInt(app.elements.autoRefresh.value, 10);
+if (initialRefresh > 0) {
+  app.autoRefreshTimer = setInterval(() => {
+    app.loadStatus();
+    app.loadStats();
+  }, initialRefresh * 1000);
 }

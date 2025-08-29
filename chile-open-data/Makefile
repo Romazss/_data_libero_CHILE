@@ -4,7 +4,7 @@
 .PHONY: help install check-python check-r run-backend test-api clean docs
 
 # Configuración
-PYTHON = python3
+PYTHON = /Users/estebanroman/Documents/GitHub/_data_libero_CHILE/.venv/bin/python
 BACKEND_DIR = web_app/backend
 FRONTEND_DIR = web_app/frontend
 SCRIPTS_DIR = data_sources/scripts

@@ -2,7 +2,8 @@
 from pathlib import Path
 import yaml
 
-DEFAULT_SOURCES_PATH = Path(__file__).resolve().parents[2] / "data_sources" / "config" / "sources.yaml"
+# Ruta corregida para encontrar sources.yaml desde el backend
+DEFAULT_SOURCES_PATH = Path(__file__).resolve().parents[3] / "data_sources" / "config" / "sources.yaml"
 
 class SourceConfigError(Exception):
     pass
@@ -14,10 +15,9 @@ def load_sources(path: Path = DEFAULT_SOURCES_PATH) -> list[dict]:
     with open(path, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f) or {}
 
-    # Soporta tanto 'datasets' como 'sources' por compatibilidad
-    datasets = data.get("datasets", data.get("sources", []))
+    datasets = data.get("datasets", [])
     if not isinstance(datasets, list) or not datasets:
-        raise SourceConfigError("El YAML debe contener una lista 'datasets' o 'sources' no vacía.")
+        raise SourceConfigError("El YAML debe contener una lista 'datasets' no vacía.")
 
     required = {"id", "name", "category", "url"}
     for ds in datasets:

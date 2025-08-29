@@ -1,27 +1,319 @@
-# backend app.py example
+# backend app.py - Fase 2
 # /web_app/backend/app.py
-from flask import Flask, jsonify
+"""
+Backend robusto para la Biblioteca de Datos Abiertos de Chile - Fase 2
+API REST completa con base de datos, cache y monitoreo automático
+"""
+
+import os
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
+from datetime import datetime, timezone
+import logging
+
+# Imports locales
 from services.sources import load_sources, SourceConfigError
 from services.checker import check_all
+from models import Database
+from cache import cache, cached, invalidate_datasets_cache
+from scheduler import init_scheduler, get_scheduler
 
+
+# Configurar logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Crear aplicación Flask
 app = Flask(__name__)
 CORS(app)  # habilita CORS para el frontend
 
-@app.get("/status")
+# Configuración
+app.config['DATABASE_PATH'] = os.getenv('DATABASE_PATH', 'data/chile_data.db')
+app.config['CACHE_DEFAULT_TIMEOUT'] = int(os.getenv('CACHE_DEFAULT_TIMEOUT', '300'))
+app.config['MONITOR_ENABLED'] = os.getenv('MONITOR_ENABLED', 'true').lower() == 'true'
+app.config['MONITOR_INTERVAL'] = int(os.getenv('MONITOR_INTERVAL', '300'))
+
+# Inicializar base de datos
+db = Database(app.config['DATABASE_PATH'])
+
+# Inicializar scheduler si está habilitado
+if app.config['MONITOR_ENABLED']:
+    scheduler = init_scheduler(db)
+    scheduler.start()
+    logger.info("Monitoreo automático iniciado")
+
+
+@app.route("/health")
+def health():
+    """Endpoint de salud del servicio"""
+    return jsonify({
+        "status": "healthy",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "version": "2.0.0",
+        "database": "connected",
+        "cache_stats": cache.stats()
+    })
+
+
+@app.route("/status")
+@cached(ttl=60, key_prefix="api")  # Cache por 1 minuto
 def status():
-    """Devuelve el estado de disponibilidad de cada dataset definido en sources.yaml"""
+    """Estado actual de todos los datasets"""
     try:
-        datasets = load_sources()
+        # Intentar obtener de la base de datos primero
+        latest_status = db.get_latest_status()
+        
+        if not latest_status:
+            # Si no hay datos en BD, hacer check en vivo
+            datasets = load_sources()
+            db.register_datasets(datasets)
+            results = check_all(datasets)
+            
+            # Guardar en BD
+            check_time = datetime.now(timezone.utc)
+            for result in results:
+                from models import DatasetStatus
+                status_obj = DatasetStatus(
+                    id=result['id'],
+                    name=result['name'], 
+                    category=result['category'],
+                    url=result['url'],
+                    status=result['status'],
+                    http_code=result.get('http_code'),
+                    latency_ms=result.get('latency_ms'),
+                    error=result.get('error'),
+                    checked_at=check_time
+                )
+                db.save_dataset_status(status_obj)
+            
+            latest_status = results
+        
+        return jsonify({
+            "count": len(latest_status),
+            "results": latest_status,
+            "last_updated": latest_status[0]['checked_at'] if latest_status else None
+        })
+        
     except SourceConfigError as e:
         return jsonify({"error": str(e)}), 500
-    results = check_all(datasets)
-    return jsonify({"count": len(results), "results": results})
+    except Exception as e:
+        logger.error(f"Error in /status: {e}")
+        return jsonify({"error": "Internal server error"}), 500
 
-@app.get("/health")
-def health():
-    return {"ok": True}
+
+@app.route("/datasets")
+@cached(ttl=300, key_prefix="api")  # Cache por 5 minutos
+def get_datasets():
+    """Lista todos los datasets registrados"""
+    try:
+        category = request.args.get('category')
+        active_only = request.args.get('active', 'true').lower() == 'true'
+        
+        datasets = db.get_registered_datasets(active_only=active_only)
+        
+        if category:
+            datasets = [ds for ds in datasets if ds['category'].lower() == category.lower()]
+        
+        return jsonify({
+            "count": len(datasets),
+            "datasets": datasets
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in /datasets: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@app.route("/datasets/<dataset_id>/history")
+def get_dataset_history(dataset_id: str):
+    """Histórico de un dataset específico"""
+    try:
+        hours = int(request.args.get('hours', 24))
+        history = db.get_dataset_history(dataset_id, hours=hours)
+        
+        if not history:
+            return jsonify({"error": "Dataset not found or no history available"}), 404
+        
+        return jsonify({
+            "dataset_id": dataset_id,
+            "hours": hours,
+            "count": len(history),
+            "history": history
+        })
+        
+    except ValueError:
+        return jsonify({"error": "Invalid hours parameter"}), 400
+    except Exception as e:
+        logger.error(f"Error in /datasets/{dataset_id}/history: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@app.route("/stats")
+@cached(ttl=120, key_prefix="api")  # Cache por 2 minutos
+def get_stats():
+    """Estadísticas generales de disponibilidad"""
+    try:
+        hours = int(request.args.get('hours', 24))
+        stats = db.get_availability_stats(hours=hours)
+        
+        return jsonify({
+            "hours": hours,
+            "stats": stats,
+            "generated_at": datetime.now(timezone.utc).isoformat()
+        })
+        
+    except ValueError:
+        return jsonify({"error": "Invalid hours parameter"}), 400
+    except Exception as e:
+        logger.error(f"Error in /stats: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@app.route("/categories")
+@cached(ttl=600, key_prefix="api")  # Cache por 10 minutos
+def get_categories():
+    """Lista todas las categorías disponibles"""
+    try:
+        datasets = db.get_registered_datasets()
+        categories = {}
+        
+        for dataset in datasets:
+            cat = dataset['category']
+            if cat not in categories:
+                categories[cat] = {
+                    'name': cat,
+                    'count': 0,
+                    'datasets': []
+                }
+            categories[cat]['count'] += 1
+            categories[cat]['datasets'].append({
+                'id': dataset['id'],
+                'name': dataset['name']
+            })
+        
+        return jsonify({
+            "count": len(categories),
+            "categories": list(categories.values())
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in /categories: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@app.route("/check", methods=['POST'])
+def force_check():
+    """Fuerza una verificación inmediata de todos los datasets"""
+    try:
+        # Solo permitir si el monitoreo está habilitado
+        if not app.config['MONITOR_ENABLED']:
+            return jsonify({"error": "Monitoring is disabled"}), 503
+        
+        scheduler = get_scheduler()
+        scheduler.monitor.force_check()
+        
+        # Invalidar cache
+        invalidate_datasets_cache()
+        
+        return jsonify({
+            "message": "Check forced successfully",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in /check: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@app.route("/admin/cache", methods=['DELETE'])
+def clear_cache():
+    """Limpia el cache (endpoint de administración)"""
+    try:
+        cache.clear()
+        return jsonify({"message": "Cache cleared successfully"})
+    except Exception as e:
+        logger.error(f"Error clearing cache: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@app.route("/admin/cache/stats")
+def cache_stats():
+    """Estadísticas del cache"""
+    try:
+        stats = cache.stats()
+        return jsonify(stats)
+    except Exception as e:
+        logger.error(f"Error getting cache stats: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@app.route("/admin/scheduler")
+def scheduler_status():
+    """Estado del scheduler"""
+    try:
+        if not app.config['MONITOR_ENABLED']:
+            return jsonify({"status": "disabled"})
+        
+        scheduler = get_scheduler()
+        status = scheduler.get_status()
+        return jsonify(status)
+        
+    except Exception as e:
+        logger.error(f"Error getting scheduler status: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
+# Servir archivos estáticos del frontend
+@app.route('/')
+def serve_frontend():
+    """Servir la página principal del frontend"""
+    return send_from_directory('../frontend', 'index.html')
+
+
+@app.route('/<path:filename>')
+def serve_static(filename):
+    """Servir archivos estáticos"""
+    return send_from_directory('../frontend', filename)
+
+
+# Manejador de errores
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({"error": "Endpoint not found"}), 404
+
+
+@app.errorhandler(500)
+def internal_error(error):
+    return jsonify({"error": "Internal server error"}), 500
+
+
+# Limpieza al cerrar la aplicación
+@app.teardown_appcontext
+def cleanup(error):
+    """Limpieza al cerrar contexto"""
+    if error:
+        logger.error(f"Application error: {error}")
+
+
+def shutdown_handler():
+    """Manejador de cierre limpio"""
+    try:
+        if app.config['MONITOR_ENABLED']:
+            scheduler = get_scheduler()
+            scheduler.stop()
+        logger.info("Application shutdown completed")
+    except Exception as e:
+        logger.error(f"Error during shutdown: {e}")
+
 
 if __name__ == "__main__":
-    # Ejecución local: FLASK_APP=app.py flask run --port 5001
-    app.run(host="0.0.0.0", port=5001, debug=True)
+    import atexit
+    atexit.register(shutdown_handler)
+    
+    # Configuración para desarrollo
+    host = os.getenv('BACKEND_HOST', '0.0.0.0')
+    port = int(os.getenv('BACKEND_PORT', '5001'))
+    debug = os.getenv('FLASK_DEBUG', 'true').lower() == 'true'
+    
+    logger.info(f"Iniciando servidor en {host}:{port} (debug={debug})")
+    app.run(host=host, port=port, debug=debug)
