@@ -1,2 +1,43 @@
-# add your sources here
-sources: []
+# Fuentes de datos abiertos de Chile
+# Configuración inicial para pruebas de la Fase 1
+
+datasets:
+  - id: "bcentral_pib"
+    name: "PIB Trimestral - Banco Central"
+    category: "economía"
+    url: "https://si3.bcentral.cl/siete/secure/cuadros/home.aspx"
+    description: "Producto Interno Bruto trimestral de Chile"
+    method: "HEAD"
+    timeout: 10
+    
+  - id: "ine_censo"
+    name: "Censo de Población y Vivienda - INE"
+    category: "demografía"
+    url: "https://www.ine.cl/estadisticas/sociales/censos-de-poblacion-y-vivienda"
+    description: "Datos del Censo Nacional de Población y Vivienda"
+    method: "HEAD"
+    timeout: 8
+    
+  - id: "deis_defunciones"
+    name: "Defunciones por Causas - DEIS MINSAL"
+    category: "salud"
+    url: "https://deis.minsal.cl/deis/ev/defunciones_causas/"
+    description: "Estadísticas de defunciones por causas básicas de muerte"
+    method: "HEAD"
+    timeout: 10
+    
+  - id: "mineduc_matriculas"
+    name: "Matrícula Estudiantil - MINEDUC"
+    category: "educación"
+    url: "https://www.mineduc.cl/investigadores/estadisticas/"
+    description: "Estadísticas de matrícula del sistema educacional chileno"
+    method: "HEAD"
+    timeout: 8
+    
+  - id: "dt_empleo"
+    name: "Encuesta Nacional de Empleo - Ministerio del Trabajo"
+    category: "trabajo"
+    url: "https://www.dt.gob.cl/portal/1626/w3-propertyvalue-22924.html"
+    description: "Datos de empleo, desempleo y condiciones laborales"
+    method: "HEAD"
+    timeout: 10

@@ -1,2 +1,6 @@
-Flask
-requests
+Flask>=2.0.0
+flask-cors>=4.0.0
+requests>=2.25.0
+PyYAML>=6.0.0
+pydantic>=2.0.0
+beautifulsoup4>=4.9.0

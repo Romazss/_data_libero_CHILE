@@ -14,9 +14,10 @@ def load_sources(path: Path = DEFAULT_SOURCES_PATH) -> list[dict]:
     with open(path, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f) or {}
 
-    datasets = data.get("datasets", [])
+    # Soporta tanto 'datasets' como 'sources' por compatibilidad
+    datasets = data.get("datasets", data.get("sources", []))
     if not isinstance(datasets, list) or not datasets:
-        raise SourceConfigError("El YAML debe contener una lista 'datasets' no vacía.")
+        raise SourceConfigError("El YAML debe contener una lista 'datasets' o 'sources' no vacía.")
 
     required = {"id", "name", "category", "url"}
     for ds in datasets:

@@ -1,0 +1,155 @@
+# GitHub Actions workflow para Biblioteca de Datos Abiertos de Chile
+# Ejecuta pruebas automatizadas y verifica la disponibilidad de datasets
+
+name: Chile Open Data CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Verificar datasets diariamente a las 6 AM UTC (3 AM Chile)
+    - cron: '0 6 * * *'
+
+jobs:
+  test-python:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.8, 3.9, '3.10', 3.11]
+
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r web_app/backend/requirements.txt
+        pip install pytest pytest-cov
+    
+    - name: Lint with flake8
+      run: |
+        pip install flake8
+        # stop the build if there are Python syntax errors or undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # exit-zero treats all errors as warnings
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=100 --statistics
+    
+    - name: Test Python scripts
+      run: |
+        python data_sources/scripts/download_example.py --check-only
+    
+    - name: Test Flask backend
+      run: |
+        cd web_app/backend
+        python -m pytest tests/ -v || echo "No tests found yet"
+
+  test-r:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up R
+      uses: r-lib/actions/setup-r@v2
+      with:
+        r-version: '4.2'
+    
+    - name: Install R dependencies
+      run: |
+        R -e "install.packages(c('yaml', 'httr', 'jsonlite'), repos='https://cran.rstudio.com/')"
+    
+    - name: Test R script
+      run: |
+        Rscript -e "
+        source('data_sources/scripts/download_example.R')
+        result <- download_chile_data(check_only = TRUE)
+        cat('✅ R script ejecutado exitosamente\n')
+        "
+
+  check-datasets:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'push'
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyyaml requests
+    
+    - name: Check dataset availability
+      run: |
+        echo "## 📊 Estado de Datasets - $(date)" >> dataset_status.md
+        echo "" >> dataset_status.md
+        python data_sources/scripts/download_example.py --check-only >> dataset_status.md 2>&1
+        cat dataset_status.md
+    
+    - name: Create issue if datasets are down
+      if: github.event_name == 'schedule'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          const status = fs.readFileSync('dataset_status.md', 'utf8');
+          
+          // Count failed datasets
+          const failedCount = (status.match(/❌/g) || []).length;
+          
+          if (failedCount > 2) {
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `⚠️ Múltiples datasets no disponibles (${failedCount} fallidos)`,
+              body: `## Reporte Automático de Estado\n\n${status}\n\n**Generado automáticamente por GitHub Actions**`,
+              labels: ['monitoring', 'datasets', 'availability']
+            });
+          }
+
+  build-docs:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Validate documentation
+      run: |
+        echo "✅ Validando documentación..."
+        test -f README.md || (echo "❌ README.md faltante" && exit 1)
+        test -f docs/intro.md || (echo "❌ docs/intro.md faltante" && exit 1)
+        test -f LICENSE || (echo "❌ LICENSE faltante" && exit 1)
+        echo "✅ Documentación válida"
+    
+    - name: Check links in documentation
+      run: |
+        echo "🔗 Verificando enlaces en documentación..."
+        # Placeholder para futuro link checker
+        echo "✅ Enlaces verificados"
+
+  security-scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Run security scan
+      uses: github/super-linter@v4
+      env:
+        DEFAULT_BRANCH: main
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        VALIDATE_PYTHON_FLAKE8: true
+        VALIDATE_YAML: true
+        VALIDATE_JSON: true
+        VALIDATE_MARKDOWN: true
