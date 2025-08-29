@@ -1,10 +1,16 @@
 # Biblioteca de Datos Abiertos de Chile (Scaffold)
 
-Estructura mínima del repositorio. Rellena cada carpeta según tu flujo de trabajo:
+# Introducción
 
-- `data_sources/` → configuración (`config/sources.yaml`) y scripts de ingesta.
-- `web_app/` → frontend y backend del portal.
-- `libraries/` → paquetes en R y Python.
-- `docs/` → documentación y planes.
+La **Biblioteca de Datos Abiertos de Chile** busca centralizar y organizar las principales fuentes de datos del país en un solo espacio abierto, accesible y escrutinable.
 
-> Generado automáticamente el 2025-08-27 22:03.
+### Objetivos de la primera fase
+- Construir una estructura inicial de repositorio.
+- Integrar un archivo de configuración (`sources.yaml`) que defina las fuentes.
+- Implementar un script de descarga en Python.
+- Sentar las bases para futuras fases (portal web, librerías R y Python, monitoreo de disponibilidad).
+
+### Principios
+- Transparencia en las fuentes de datos.
+- Acceso libre y sencillo.
+- Diseño estético y experiencia de usuario cuidada.

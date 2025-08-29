@@ -1,0 +1,51 @@
+<!-- /web_app/frontend/index.html -->
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Biblioteca de Datos Abiertos de Chile — Estado de Datasets</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="container">
+    <h1>Estado de Datasets</h1>
+    <p class="subtitle">Lectura de <code>sources.yaml</code> y disponibilidad en tiempo real</p>
+    <div class="toolbar">
+      <button id="refreshBtn">Actualizar</button>
+      <label>
+        Auto-refresco
+        <select id="autoRefresh">
+          <option value="0">Off</option>
+          <option value="30">30s</option>
+          <option value="60" selected>60s</option>
+          <option value="300">5min</option>
+        </select>
+      </label>
+    </div>
+  </header>
+
+  <main class="container">
+    <div id="stats" class="stats"></div>
+    <table id="table" class="table">
+      <thead>
+        <tr>
+          <th>Dataset</th>
+          <th>Categoría</th>
+          <th>Estado</th>
+          <th>Latencia</th>
+          <th>HTTP</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <p id="error" class="error"></p>
+  </main>
+
+  <footer class="container footer">
+    <small>Fase 2 · MVP · <a href="https://github.com" target="_blank" rel="noreferrer">Repositorio</a></small>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
