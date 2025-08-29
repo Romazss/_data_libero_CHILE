@@ -78,6 +78,7 @@ class ChileDataApp {
   init() {
     this.setupEventListeners();
     this.initWebSocket();
+    this.setupAnalyticsDashboard();
     this.loadInitialData();
     this.checkApiHealth();
     this.setupAutoRefresh();
@@ -790,6 +791,280 @@ class ChileDataApp {
     if (diffDays < 7) return `Hace ${diffDays}d`;
     
     return time.toLocaleDateString('es-CL');
+  }
+  
+  // === MÉTODOS DE ANALYTICS ===
+  
+  setupAnalyticsDashboard() {
+    // Referencias a elementos
+    this.analyticsElements = {
+      period: document.getElementById('analyticsPeriod'),
+      refreshBtn: document.getElementById('refreshAnalytics'),
+      generateReportBtn: document.getElementById('generateReport'),
+      uptime: document.getElementById('analyticsUptime'),
+      latency: document.getElementById('analyticsLatency'),
+      reliability: document.getElementById('analyticsReliability'),
+      checks: document.getElementById('analyticsChecks'),
+      topDatasets: document.getElementById('topDatasetsContent'),
+      problematicDatasets: document.getElementById('problematicDatasetsContent'),
+      categoryAnalytics: document.getElementById('categoryAnalyticsContent'),
+      dailyReportBtn: document.getElementById('generateDailyReport'),
+      weeklyReportBtn: document.getElementById('generateWeeklyReport'),
+      exportBtn: document.getElementById('exportAnalytics')
+    };
+    
+    // Event listeners
+    this.analyticsElements.refreshBtn.addEventListener('click', () => {
+      this.loadAnalytics();
+    });
+    
+    this.analyticsElements.period.addEventListener('change', () => {
+      this.loadAnalytics();
+    });
+    
+    this.analyticsElements.generateReportBtn.addEventListener('click', () => {
+      this.generateAnalyticsReport();
+    });
+    
+    this.analyticsElements.dailyReportBtn.addEventListener('click', () => {
+      this.generateReport('daily');
+    });
+    
+    this.analyticsElements.weeklyReportBtn.addEventListener('click', () => {
+      this.generateReport('weekly');
+    });
+    
+    this.analyticsElements.exportBtn.addEventListener('click', () => {
+      this.exportAnalyticsData();
+    });
+    
+    // Cargar analytics inicial
+    this.loadAnalytics();
+  }
+  
+  async loadAnalytics() {
+    const period = this.analyticsElements.period.value;
+    
+    try {
+      // Mostrar loading en todas las secciones
+      this.showAnalyticsLoading();
+      
+      // Cargar métricas principales
+      const systemMetrics = await this.fetchAPI(`/api/analytics/system-metrics?hours=${period}`);
+      this.updateSystemMetrics(systemMetrics);
+      
+      // Cargar top datasets
+      const topDatasets = await this.fetchAPI(`/api/analytics/top-datasets?hours=${period}`);
+      this.updateTopDatasets(topDatasets);
+      
+      // Cargar datasets problemáticos
+      const problematicDatasets = await this.fetchAPI(`/api/analytics/problematic-datasets?hours=${period}`);
+      this.updateProblematicDatasets(problematicDatasets);
+      
+      // Cargar analytics por categoría
+      const categoryAnalytics = await this.fetchAPI(`/api/analytics/category-analytics?hours=${period}`);
+      this.updateCategoryAnalytics(categoryAnalytics);
+      
+    } catch (error) {
+      console.error('Error cargando analytics:', error);
+      this.showAnalyticsError();
+    }
+  }
+  
+  showAnalyticsLoading() {
+    const loadingHTML = `
+      <div class="loading-indicator">
+        <div class="spinner"></div>
+        <span>Cargando...</span>
+      </div>
+    `;
+    
+    this.analyticsElements.topDatasets.innerHTML = loadingHTML;
+    this.analyticsElements.problematicDatasets.innerHTML = loadingHTML;
+    this.analyticsElements.categoryAnalytics.innerHTML = loadingHTML;
+  }
+  
+  showAnalyticsError() {
+    const errorHTML = `
+      <div class="analytics-error">
+        <p>❌ Error cargando datos</p>
+        <button onclick="app.loadAnalytics()" class="btn btn-sm">Reintentar</button>
+      </div>
+    `;
+    
+    this.analyticsElements.topDatasets.innerHTML = errorHTML;
+    this.analyticsElements.problematicDatasets.innerHTML = errorHTML;
+    this.analyticsElements.categoryAnalytics.innerHTML = errorHTML;
+  }
+  
+  updateSystemMetrics(metrics) {
+    this.analyticsElements.uptime.textContent = metrics.avg_uptime.toFixed(1);
+    this.analyticsElements.latency.textContent = metrics.avg_response_time.toFixed(0);
+    this.analyticsElements.reliability.textContent = metrics.reliability_score.toFixed(0);
+    this.analyticsElements.checks.textContent = metrics.total_checks.toLocaleString();
+  }
+  
+  updateTopDatasets(datasets) {
+    if (!datasets || datasets.length === 0) {
+      this.analyticsElements.topDatasets.innerHTML = '<p class="text-center">No hay datos disponibles</p>';
+      return;
+    }
+    
+    const html = `
+      <ul class="dataset-list">
+        ${datasets.map(dataset => `
+          <li class="dataset-item success">
+            <div>
+              <div class="dataset-name">${this.escapeHtml(dataset.name)}</div>
+              <div class="dataset-metrics">
+                Uptime: ${dataset.uptime.toFixed(1)}% | 
+                Latencia: ${dataset.avg_response_time.toFixed(0)}ms
+              </div>
+            </div>
+            <div class="dataset-score">${dataset.reliability_score.toFixed(0)}</div>
+          </li>
+        `).join('')}
+      </ul>
+    `;
+    
+    this.analyticsElements.topDatasets.innerHTML = html;
+  }
+  
+  updateProblematicDatasets(datasets) {
+    if (!datasets || datasets.length === 0) {
+      this.analyticsElements.problematicDatasets.innerHTML = '<p class="text-center">¡Excelente! No hay datasets problemáticos</p>';
+      return;
+    }
+    
+    const html = `
+      <ul class="dataset-list">
+        ${datasets.map(dataset => `
+          <li class="dataset-item error">
+            <div>
+              <div class="dataset-name">${this.escapeHtml(dataset.name)}</div>
+              <div class="dataset-metrics">
+                Uptime: ${dataset.uptime.toFixed(1)}% | 
+                Errores: ${dataset.error_count}
+              </div>
+            </div>
+            <div class="dataset-score">${dataset.reliability_score.toFixed(0)}</div>
+          </li>
+        `).join('')}
+      </ul>
+    `;
+    
+    this.analyticsElements.problematicDatasets.innerHTML = html;
+  }
+  
+  updateCategoryAnalytics(categories) {
+    if (!categories || Object.keys(categories).length === 0) {
+      this.analyticsElements.categoryAnalytics.innerHTML = '<p class="text-center">No hay datos de categorías disponibles</p>';
+      return;
+    }
+    
+    const html = `
+      <div class="category-grid">
+        ${Object.entries(categories).map(([category, data]) => `
+          <div class="category-item">
+            <div class="category-name">${this.escapeHtml(category)}</div>
+            <div class="category-stats">
+              <div class="category-stat">
+                <span class="category-stat-value">${data.total_datasets}</span>
+                <span>Datasets</span>
+              </div>
+              <div class="category-stat">
+                <span class="category-stat-value">${data.avg_uptime.toFixed(1)}%</span>
+                <span>Uptime</span>
+              </div>
+              <div class="category-stat">
+                <span class="category-stat-value">${data.avg_response_time.toFixed(0)}ms</span>
+                <span>Latencia</span>
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+    
+    this.analyticsElements.categoryAnalytics.innerHTML = html;
+  }
+  
+  async generateAnalyticsReport() {
+    try {
+      this.analyticsElements.generateReportBtn.disabled = true;
+      this.analyticsElements.generateReportBtn.textContent = 'Generando...';
+      
+      const period = this.analyticsElements.period.value;
+      const response = await this.fetchAPI(`/api/reports/generate-custom?hours=${period}`);
+      
+      this.showSuccess('Reporte generado exitosamente');
+      
+      // Crear enlace de descarga
+      const link = document.createElement('a');
+      link.href = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(response, null, 2))}`;
+      link.download = `analytics-report-${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      
+    } catch (error) {
+      console.error('Error generando reporte:', error);
+      this.showError('Error generando el reporte');
+    } finally {
+      this.analyticsElements.generateReportBtn.disabled = false;
+      this.analyticsElements.generateReportBtn.textContent = 'Generar Reporte';
+    }
+  }
+  
+  async generateReport(type) {
+    try {
+      const button = type === 'daily' ? this.analyticsElements.dailyReportBtn : this.analyticsElements.weeklyReportBtn;
+      const originalText = button.textContent;
+      
+      button.disabled = true;
+      button.textContent = 'Generando...';
+      
+      const response = await this.fetchAPI(`/api/reports/generate-${type}`);
+      
+      this.showSuccess(`Reporte ${type === 'daily' ? 'diario' : 'semanal'} generado exitosamente`);
+      
+      // Crear enlace de descarga
+      const link = document.createElement('a');
+      link.href = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(response, null, 2))}`;
+      link.download = `${type}-report-${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      
+    } catch (error) {
+      console.error(`Error generando reporte ${type}:`, error);
+      this.showError(`Error generando el reporte ${type === 'daily' ? 'diario' : 'semanal'}`);
+    } finally {
+      const button = type === 'daily' ? this.analyticsElements.dailyReportBtn : this.analyticsElements.weeklyReportBtn;
+      button.disabled = false;
+      button.textContent = type === 'daily' ? 'Reporte Diario' : 'Reporte Semanal';
+    }
+  }
+  
+  async exportAnalyticsData() {
+    try {
+      this.analyticsElements.exportBtn.disabled = true;
+      this.analyticsElements.exportBtn.textContent = 'Exportando...';
+      
+      const period = this.analyticsElements.period.value;
+      const response = await this.fetchAPI(`/api/analytics/export?hours=${period}&format=csv`);
+      
+      // Crear enlace de descarga CSV
+      const link = document.createElement('a');
+      link.href = `data:text/csv;charset=utf-8,${encodeURIComponent(response.csv_data)}`;
+      link.download = `analytics-export-${new Date().toISOString().slice(0, 10)}.csv`;
+      link.click();
+      
+      this.showSuccess('Datos exportados exitosamente');
+      
+    } catch (error) {
+      console.error('Error exportando datos:', error);
+      this.showError('Error exportando los datos');
+    } finally {
+      this.analyticsElements.exportBtn.disabled = false;
+      this.analyticsElements.exportBtn.textContent = 'Exportar Datos';
+    }
   }
 }
 

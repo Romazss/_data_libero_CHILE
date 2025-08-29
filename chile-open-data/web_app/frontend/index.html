@@ -131,6 +131,110 @@
     </div>
   </main>
 
+  <!-- Analytics Dashboard -->
+  <section class="container analytics-section" id="analyticsSection">
+    <div class="analytics-header">
+      <h2>📊 Analytics Dashboard</h2>
+      <div class="analytics-controls">
+        <label>
+          Período:
+          <select id="analyticsPeriod">
+            <option value="24">Últimas 24h</option>
+            <option value="168">Última semana</option>
+            <option value="720">Último mes</option>
+          </select>
+        </label>
+        <button id="refreshAnalytics" class="btn btn-secondary">Actualizar</button>
+        <button id="generateReport" class="btn btn-primary">Generar Reporte</button>
+      </div>
+    </div>
+    
+    <!-- Métricas principales -->
+    <div class="analytics-metrics">
+      <div class="metric-card">
+        <div class="metric-icon">⏱️</div>
+        <div class="metric-content">
+          <h4>Uptime Promedio</h4>
+          <span class="metric-value" id="analyticsUptime">-</span>
+          <span class="metric-unit">%</span>
+        </div>
+      </div>
+      
+      <div class="metric-card">
+        <div class="metric-icon">🚀</div>
+        <div class="metric-content">
+          <h4>Latencia Promedio</h4>
+          <span class="metric-value" id="analyticsLatency">-</span>
+          <span class="metric-unit">ms</span>
+        </div>
+      </div>
+      
+      <div class="metric-card">
+        <div class="metric-icon">🎯</div>
+        <div class="metric-content">
+          <h4>Score de Confiabilidad</h4>
+          <span class="metric-value" id="analyticsReliability">-</span>
+          <span class="metric-unit">/100</span>
+        </div>
+      </div>
+      
+      <div class="metric-card">
+        <div class="metric-icon">📈</div>
+        <div class="metric-content">
+          <h4>Verificaciones</h4>
+          <span class="metric-value" id="analyticsChecks">-</span>
+          <span class="metric-unit">total</span>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Gráficos y tablas -->
+    <div class="analytics-grid">
+      <!-- Top Datasets -->
+      <div class="analytics-card">
+        <h3>🏆 Mejores Datasets</h3>
+        <div id="topDatasetsContent" class="analytics-content">
+          <div class="loading-indicator">
+            <div class="spinner"></div>
+            <span>Cargando...</span>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Datasets Problemáticos -->
+      <div class="analytics-card">
+        <h3>⚠️ Datasets Problemáticos</h3>
+        <div id="problematicDatasetsContent" class="analytics-content">
+          <div class="loading-indicator">
+            <div class="spinner"></div>
+            <span>Cargando...</span>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Analytics por Categoría -->
+      <div class="analytics-card full-width">
+        <h3>📂 Analytics por Categoría</h3>
+        <div id="categoryAnalyticsContent" class="analytics-content">
+          <div class="loading-indicator">
+            <div class="spinner"></div>
+            <span>Cargando...</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Reportes -->
+    <div class="reports-section">
+      <h3>📋 Reportes</h3>
+      <div class="reports-actions">
+        <button id="generateDailyReport" class="btn btn-outline">Reporte Diario</button>
+        <button id="generateWeeklyReport" class="btn btn-outline">Reporte Semanal</button>
+        <button id="exportAnalytics" class="btn btn-outline">Exportar Datos</button>
+      </div>
+    </div>
+  </section>
+
   <!-- Footer -->
   <footer class="container footer">
     <div class="footer-content">

@@ -20,6 +20,8 @@ from cache import cache, cached, invalidate_datasets_cache
 from scheduler import init_scheduler, get_scheduler
 from notifications import notification_manager, create_system_notification
 from websockets import WebSocketManager
+from analytics import AnalyticsEngine
+from reports import ReportGenerator, ScheduledReporter
 
 
 # Configurar logging
@@ -44,6 +46,11 @@ app.config['MONITOR_INTERVAL'] = int(os.getenv('MONITOR_INTERVAL', '300'))
 
 # Inicializar base de datos
 db = Database(app.config['DATABASE_PATH'])
+
+# Inicializar analytics y reportes
+analytics_engine = AnalyticsEngine(db)
+report_generator = ReportGenerator(db, analytics_engine)
+scheduled_reporter = ScheduledReporter(db)
 
 # Inicializar scheduler si está habilitado
 if app.config['MONITOR_ENABLED']:
@@ -391,6 +398,205 @@ def websocket_status():
     except Exception as e:
         logger.error(f"Error getting WebSocket status: {e}")
         return jsonify({"error": "Failed to get WebSocket status"}), 500
+
+
+# === ENDPOINTS DE ANALYTICS ===
+
+@app.route("/api/analytics/metrics")
+def get_analytics_metrics():
+    """Obtiene métricas de analytics del sistema"""
+    try:
+        hours = request.args.get('hours', 24, type=int)
+        metrics = analytics_engine.generate_system_metrics(hours=hours)
+        
+        return jsonify({
+            "success": True,
+            "metrics": metrics.to_dict(),
+            "period_hours": hours
+        })
+    except Exception as e:
+        logger.error(f"Error getting analytics metrics: {e}")
+        return jsonify({"error": "Failed to get analytics metrics"}), 500
+
+
+@app.route("/api/analytics/categories")
+def get_category_analytics():
+    """Obtiene analytics por categoría"""
+    try:
+        hours = request.args.get('hours', 24, type=int)
+        categories = analytics_engine.generate_category_analytics(hours=hours)
+        
+        return jsonify({
+            "success": True,
+            "categories": categories,
+            "period_hours": hours
+        })
+    except Exception as e:
+        logger.error(f"Error getting category analytics: {e}")
+        return jsonify({"error": "Failed to get category analytics"}), 500
+
+
+@app.route("/api/analytics/timeline")
+def get_timeline_analytics():
+    """Obtiene datos de timeline para gráficos"""
+    try:
+        hours = request.args.get('hours', 24, type=int)
+        interval = request.args.get('interval', 60, type=int)
+        timeline = analytics_engine.generate_timeline_data(hours=hours, interval_minutes=interval)
+        
+        return jsonify({
+            "success": True,
+            "timeline": timeline,
+            "period_hours": hours,
+            "interval_minutes": interval
+        })
+    except Exception as e:
+        logger.error(f"Error getting timeline analytics: {e}")
+        return jsonify({"error": "Failed to get timeline analytics"}), 500
+
+
+@app.route("/api/analytics/datasets/top")
+def get_top_datasets():
+    """Obtiene los datasets con mejor rendimiento"""
+    try:
+        limit = request.args.get('limit', 10, type=int)
+        hours = request.args.get('hours', 24, type=int)
+        top_datasets = analytics_engine.get_top_performing_datasets(limit=limit, hours=hours)
+        
+        return jsonify({
+            "success": True,
+            "datasets": top_datasets,
+            "limit": limit,
+            "period_hours": hours
+        })
+    except Exception as e:
+        logger.error(f"Error getting top datasets: {e}")
+        return jsonify({"error": "Failed to get top datasets"}), 500
+
+
+@app.route("/api/analytics/datasets/problematic")
+def get_problematic_datasets():
+    """Obtiene los datasets con más problemas"""
+    try:
+        limit = request.args.get('limit', 10, type=int)
+        hours = request.args.get('hours', 24, type=int)
+        problematic = analytics_engine.get_problematic_datasets(limit=limit, hours=hours)
+        
+        return jsonify({
+            "success": True,
+            "datasets": problematic,
+            "limit": limit,
+            "period_hours": hours
+        })
+    except Exception as e:
+        logger.error(f"Error getting problematic datasets: {e}")
+        return jsonify({"error": "Failed to get problematic datasets"}), 500
+
+
+@app.route("/api/analytics/dataset/<dataset_id>")
+def get_dataset_analytics(dataset_id):
+    """Obtiene analytics de un dataset específico"""
+    try:
+        days = request.args.get('days', 7, type=int)
+        analytics = analytics_engine.generate_dataset_analytics(dataset_id=dataset_id, days=days)
+        
+        if analytics:
+            return jsonify({
+                "success": True,
+                "analytics": analytics.to_dict(),
+                "period_days": days
+            })
+        else:
+            return jsonify({"error": "Dataset not found or no data available"}), 404
+    except Exception as e:
+        logger.error(f"Error getting dataset analytics: {e}")
+        return jsonify({"error": "Failed to get dataset analytics"}), 500
+
+
+# === ENDPOINTS DE REPORTES ===
+
+@app.route("/api/reports/daily")
+def generate_daily_report():
+    """Genera reporte diario"""
+    try:
+        report = report_generator.generate_daily_report()
+        
+        # Opcionalmente guardar el reporte
+        save = request.args.get('save', 'false').lower() == 'true'
+        filepath = None
+        if save:
+            format_type = request.args.get('format', 'json')
+            filepath = report_generator.save_report(report, format_type)
+        
+        return jsonify({
+            "success": True,
+            "report": report,
+            "saved_to": filepath
+        })
+    except Exception as e:
+        logger.error(f"Error generating daily report: {e}")
+        return jsonify({"error": "Failed to generate daily report"}), 500
+
+
+@app.route("/api/reports/weekly")
+def generate_weekly_report():
+    """Genera reporte semanal"""
+    try:
+        report = report_generator.generate_weekly_report()
+        
+        # Opcionalmente guardar el reporte
+        save = request.args.get('save', 'false').lower() == 'true'
+        filepath = None
+        if save:
+            format_type = request.args.get('format', 'json')
+            filepath = report_generator.save_report(report, format_type)
+        
+        return jsonify({
+            "success": True,
+            "report": report,
+            "saved_to": filepath
+        })
+    except Exception as e:
+        logger.error(f"Error generating weekly report: {e}")
+        return jsonify({"error": "Failed to generate weekly report"}), 500
+
+
+@app.route("/api/reports/export/<report_type>")
+def export_report(report_type):
+    """Exporta un reporte en el formato especificado"""
+    try:
+        format_type = request.args.get('format', 'json')
+        
+        if report_type == 'daily':
+            report = report_generator.generate_daily_report()
+        elif report_type == 'weekly':
+            report = report_generator.generate_weekly_report()
+        else:
+            return jsonify({"error": "Invalid report type"}), 400
+        
+        filepath = report_generator.save_report(report, format_type)
+        
+        return jsonify({
+            "success": True,
+            "report_type": report_type,
+            "format": format_type,
+            "filepath": filepath,
+            "download_url": f"/api/reports/download/{filepath.split('/')[-1]}"
+        })
+    except Exception as e:
+        logger.error(f"Error exporting report: {e}")
+        return jsonify({"error": "Failed to export report"}), 500
+
+
+@app.route("/api/reports/download/<filename>")
+def download_report(filename):
+    """Descarga un archivo de reporte"""
+    try:
+        reports_dir = "reports"
+        return send_from_directory(reports_dir, filename, as_attachment=True)
+    except Exception as e:
+        logger.error(f"Error downloading report: {e}")
+        return jsonify({"error": "File not found"}), 404
 
 
 @app.errorhandler(500)
