@@ -149,6 +149,32 @@ class Database:
             
             return [dict(row) for row in cursor.fetchall()]
     
+    def get_latest_dataset_status(self, dataset_id: str) -> Optional[DatasetStatus]:
+        """Obtiene el estado más reciente de un dataset específico"""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.execute("""
+                SELECT 
+                    dataset_id as id,
+                    name,
+                    category,
+                    url,
+                    status,
+                    http_code,
+                    latency_ms,
+                    error,
+                    checked_at
+                FROM dataset_status 
+                WHERE dataset_id = ? 
+                ORDER BY checked_at DESC 
+                LIMIT 1
+            """, (dataset_id,))
+            
+            row = cursor.fetchone()
+            if row:
+                return DatasetStatus(**dict(row))
+            return None
+    
     def get_availability_stats(self, hours: int = 24) -> Dict:
         """Obtiene estadísticas de disponibilidad"""
         with sqlite3.connect(self.db_path) as conn:

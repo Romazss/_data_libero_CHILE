@@ -101,11 +101,19 @@ class DatasetMonitor:
             # Registrar datasets en la BD si no existen
             self.db.register_datasets(datasets)
             
+            # Obtener estados anteriores para detectar cambios
+            previous_states = {}
+            for dataset in datasets:
+                prev_status = self.db.get_latest_dataset_status(dataset['id'])
+                if prev_status:
+                    previous_states[dataset['id']] = prev_status.status
+            
             # Verificar estado de cada dataset
             results = check_all(datasets)
             check_time = datetime.now(timezone.utc)
             
-            # Guardar resultados en la base de datos
+            # Guardar resultados y detectar cambios
+            changes_detected = []
             for result in results:
                 status = DatasetStatus(
                     id=result['id'],
@@ -119,6 +127,20 @@ class DatasetMonitor:
                     checked_at=check_time
                 )
                 self.db.save_dataset_status(status)
+                
+                # Detectar cambios de estado
+                prev_status = previous_states.get(result['id'])
+                if prev_status and prev_status != result['status']:
+                    changes_detected.append({
+                        'dataset_id': result['id'],
+                        'dataset_name': result['name'],
+                        'previous_status': prev_status,
+                        'new_status': result['status'],
+                        'error': result.get('error')
+                    })
+            
+            # Enviar notificaciones de cambios
+            self._send_change_notifications(changes_detected)
             
             # Invalidar cache para forzar actualización
             invalidate_datasets_cache()
@@ -127,8 +149,33 @@ class DatasetMonitor:
             available = len([r for r in results if r['status'] == 'up'])
             logger.info(f"Check completado: {available}/{len(results)} datasets disponibles")
             
+            if changes_detected:
+                logger.info(f"Detectados {len(changes_detected)} cambios de estado")
+            
         except Exception as e:
             logger.error(f"Error verificando datasets: {e}")
+    
+    def _send_change_notifications(self, changes: List[Dict]):
+        """Envía notificaciones por cambios detectados"""
+        try:
+            # Importar aquí para evitar importación circular
+            from notifications import create_dataset_change_notification
+            
+            for change in changes:
+                change_type = 'updated' if change['new_status'] == 'up' else 'error'
+                
+                create_dataset_change_notification(
+                    dataset_name=change['dataset_name'],
+                    change_type=change_type,
+                    details={
+                        'previous_status': change['previous_status'],
+                        'new_status': change['new_status'],
+                        'error': change.get('error'),
+                        'dataset_id': change['dataset_id']
+                    }
+                )
+        except Exception as e:
+            logger.error(f"Error enviando notificaciones de cambios: {e}")
     
     def _cleanup_old_data(self):
         """Limpia datos antiguos de la base de datos"""

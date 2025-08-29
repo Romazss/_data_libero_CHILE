@@ -17,6 +17,18 @@
         <p class="subtitle">Monitoreo en tiempo real de datasets públicos de Chile</p>
       </div>
       
+      <!-- Notificaciones -->
+      <div class="notifications-section">
+        <button class="notification-btn" id="notificationBtn">
+          <span class="notification-icon">🔔</span>
+          <span class="notification-badge" id="notificationBadge">0</span>
+        </button>
+        <div class="connection-status" id="connectionStatus">
+          <span class="status-indicator offline" id="statusIndicator"></span>
+          <span class="status-text" id="statusText">Desconectado</span>
+        </div>
+      </div>
+      
       <div class="stats-summary" id="statsSummary">
         <div class="stat-card">
           <span class="stat-number" id="totalDatasets">-</span>
@@ -145,11 +157,33 @@
   </footer>
 
   <!-- Modal para histórico de dataset -->
+    <!-- Modal de Notificaciones -->
+  <div id="notificationsModal" class="modal hidden">
+    <div class="modal-content notifications-modal">
+      <div class="modal-header">
+        <h3>🔔 Notificaciones</h3>
+        <div class="modal-header-actions">
+          <button id="clearNotificationsBtn" class="btn btn-secondary">Limpiar todo</button>
+          <button id="closeNotificationsModal" class="close-btn">×</button>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div id="notificationsContent" class="notifications-content">
+          <div class="loading-indicator">
+            <div class="spinner"></div>
+            <span>Cargando notificaciones...</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Histórico (existing) -->
   <div id="historyModal" class="modal hidden">
     <div class="modal-content">
       <div class="modal-header">
-        <h3 id="modalTitle">Histórico del Dataset</h3>
-        <button id="closeModal" class="modal-close">&times;</button>
+        <h3 id="historyModalTitle">Histórico del Dataset</h3>
+        <button id="closeHistoryModal" class="close-btn">×</button>
       </div>
       <div class="modal-body">
         <div class="history-controls">
@@ -172,6 +206,15 @@
       </div>
     </div>
   </div>
+
+  <!-- Overlay para modal -->
+  <div id="modalOverlay" class="modal-overlay hidden"></div>
+
+  <!-- Socket.IO Client -->
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
 
   <!-- Overlay para modal -->
   <div id="modalOverlay" class="modal-overlay hidden"></div>

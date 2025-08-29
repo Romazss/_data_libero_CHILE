@@ -16,6 +16,12 @@ class ChileDataApp {
     this.autoRefreshTimer = null;
     this.isLoading = false;
     
+    // WebSocket y notificaciones
+    this.socket = null;
+    this.notifications = [];
+    this.unreadCount = 0;
+    this.isConnected = false;
+    
     // Referencias a elementos DOM
     this.elements = {
       // Stats
@@ -43,7 +49,16 @@ class ChileDataApp {
       statusText: document.getElementById('statusText'),
       lastUpdated: document.getElementById('lastUpdated'),
       
-      // Modal
+      // Notificaciones
+      notificationBtn: document.getElementById('notificationBtn'),
+      notificationBadge: document.getElementById('notificationBadge'),
+      connectionStatus: document.getElementById('connectionStatus'),
+      notificationsModal: document.getElementById('notificationsModal'),
+      closeNotificationsModal: document.getElementById('closeNotificationsModal'),
+      clearNotificationsBtn: document.getElementById('clearNotificationsBtn'),
+      notificationsContent: document.getElementById('notificationsContent'),
+      
+      // Modal histórico
       historyModal: document.getElementById('historyModal'),
       modalOverlay: document.getElementById('modalOverlay'),
       modalTitle: document.getElementById('modalTitle'),
@@ -62,6 +77,7 @@ class ChileDataApp {
   
   init() {
     this.setupEventListeners();
+    this.initWebSocket();
     this.loadInitialData();
     this.checkApiHealth();
     this.setupAutoRefresh();
@@ -97,8 +113,16 @@ class ChileDataApp {
     
     // Escape key para cerrar modal
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') this.closeModal();
+      if (e.key === 'Escape') {
+        this.closeModal();
+        this.closeNotificationsModal();
+      }
     });
+    
+    // Event listeners para notificaciones
+    this.elements.notificationBtn.addEventListener('click', () => this.showNotifications());
+    this.elements.closeNotificationsModal.addEventListener('click', () => this.closeNotificationsModal());
+    this.elements.clearNotificationsBtn.addEventListener('click', () => this.clearNotifications());
   }
   
   async loadInitialData() {
@@ -529,6 +553,243 @@ class ChileDataApp {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+  }
+  
+  // === MÉTODOS DE WEBSOCKETS Y NOTIFICACIONES ===
+  
+  initWebSocket() {
+    try {
+      // Inicializar socket.io
+      this.socket = io(this.API_BASE);
+      
+      // Event listeners del socket
+      this.socket.on('connect', () => {
+        console.log('WebSocket conectado');
+        this.isConnected = true;
+        this.updateConnectionStatus(true);
+      });
+      
+      this.socket.on('disconnect', () => {
+        console.log('WebSocket desconectado');
+        this.isConnected = false;
+        this.updateConnectionStatus(false);
+      });
+      
+      this.socket.on('connect_error', (error) => {
+        console.error('Error de conexión WebSocket:', error);
+        this.updateConnectionStatus(false);
+      });
+      
+      // Eventos de notificaciones
+      this.socket.on('new_notification', (data) => {
+        this.handleNewNotification(data);
+      });
+      
+      this.socket.on('recent_notifications', (data) => {
+        this.handleRecentNotifications(data);
+      });
+      
+      this.socket.on('notification_marked_read', (data) => {
+        this.updateNotificationBadge(data.unread_count);
+      });
+      
+      this.socket.on('notifications_cleared', () => {
+        this.notifications = [];
+        this.unreadCount = 0;
+        this.updateNotificationBadge(0);
+        if (this.isNotificationsModalOpen()) {
+          this.renderNotifications();
+        }
+      });
+      
+      // Eventos de datos
+      this.socket.on('dataset_update', (data) => {
+        console.log('Dataset actualizado:', data);
+        // Actualizar datos en tiempo real
+        this.loadStatus();
+        this.loadStats();
+      });
+      
+      this.socket.on('stats_update', (data) => {
+        this.updateStatsDisplay(data);
+      });
+      
+    } catch (error) {
+      console.error('Error inicializando WebSocket:', error);
+      this.updateConnectionStatus(false);
+    }
+  }
+  
+  updateConnectionStatus(isConnected) {
+    const indicator = this.elements.connectionStatus.querySelector('#statusIndicator');
+    const text = this.elements.connectionStatus.querySelector('#statusText');
+    
+    if (isConnected) {
+      indicator.className = 'status-indicator online';
+      text.textContent = 'Conectado';
+    } else {
+      indicator.className = 'status-indicator offline';
+      text.textContent = 'Desconectado';
+    }
+  }
+  
+  handleNewNotification(data) {
+    const notification = data.notification;
+    
+    // Añadir a la lista local
+    this.notifications.unshift(notification);
+    
+    // Actualizar badge
+    this.updateNotificationBadge(data.unread_count);
+    
+    // Animación del botón
+    this.elements.notificationBtn.classList.add('new-notification');
+    setTimeout(() => {
+      this.elements.notificationBtn.classList.remove('new-notification');
+    }, 500);
+    
+    // Actualizar modal si está abierto
+    if (this.isNotificationsModalOpen()) {
+      this.renderNotifications();
+    }
+    
+    console.log('Nueva notificación:', notification.title);
+  }
+  
+  handleRecentNotifications(data) {
+    this.notifications = data.notifications || [];
+    this.updateNotificationBadge(data.unread_count || 0);
+  }
+  
+  updateNotificationBadge(count) {
+    this.unreadCount = count;
+    this.elements.notificationBadge.textContent = count;
+    
+    if (count === 0) {
+      this.elements.notificationBadge.classList.add('zero');
+    } else {
+      this.elements.notificationBadge.classList.remove('zero');
+    }
+  }
+  
+  showNotifications() {
+    this.loadNotifications();
+    this.elements.notificationsModal.classList.remove('hidden');
+    this.elements.modalOverlay.classList.remove('hidden');
+  }
+  
+  closeNotificationsModal() {
+    this.elements.notificationsModal.classList.add('hidden');
+    this.elements.modalOverlay.classList.add('hidden');
+  }
+  
+  isNotificationsModalOpen() {
+    return !this.elements.notificationsModal.classList.contains('hidden');
+  }
+  
+  async loadNotifications() {
+    try {
+      const response = await this.apiCall('/api/notifications?limit=50');
+      const data = await response.json();
+      
+      this.notifications = data.notifications || [];
+      this.updateNotificationBadge(data.unread_count || 0);
+      this.renderNotifications();
+      
+    } catch (error) {
+      console.error('Error loading notifications:', error);
+      this.elements.notificationsContent.innerHTML = `
+        <div class="error">Error cargando notificaciones</div>
+      `;
+    }
+  }
+  
+  renderNotifications() {
+    const container = this.elements.notificationsContent;
+    
+    if (this.notifications.length === 0) {
+      container.innerHTML = `
+        <div class="no-notifications">
+          <div class="no-notifications-icon">🔔</div>
+          <p>No hay notificaciones</p>
+        </div>
+      `;
+      return;
+    }
+    
+    const notificationsHtml = this.notifications.map(notification => {
+      const timeAgo = this.timeAgo(notification.timestamp);
+      const isUnread = !notification.read;
+      
+      return `
+        <div class="notification-item ${isUnread ? 'unread' : ''}" 
+             onclick="app.markNotificationAsRead('${notification.id}')">
+          <div class="notification-header">
+            <h4 class="notification-title">${this.escapeHtml(notification.title)}</h4>
+            <span class="notification-type ${notification.type}">${notification.type}</span>
+          </div>
+          <p class="notification-message">${this.escapeHtml(notification.message)}</p>
+          <div class="notification-time">${timeAgo}</div>
+        </div>
+      `;
+    }).join('');
+    
+    container.innerHTML = notificationsHtml;
+  }
+  
+  async markNotificationAsRead(notificationId) {
+    try {
+      const response = await this.apiCall(`/api/notifications/${notificationId}/read`, {
+        method: 'POST'
+      });
+      
+      if (response.ok) {
+        // Actualizar localmente
+        const notification = this.notifications.find(n => n.id === notificationId);
+        if (notification) {
+          notification.read = true;
+        }
+        
+        // Re-renderizar
+        this.renderNotifications();
+      }
+      
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+    }
+  }
+  
+  async clearNotifications() {
+    try {
+      const response = await this.apiCall('/api/notifications/clear', {
+        method: 'POST'
+      });
+      
+      if (response.ok) {
+        this.notifications = [];
+        this.updateNotificationBadge(0);
+        this.renderNotifications();
+      }
+      
+    } catch (error) {
+      console.error('Error clearing notifications:', error);
+    }
+  }
+  
+  timeAgo(timestamp) {
+    const now = new Date();
+    const time = new Date(timestamp);
+    const diffMs = now - time;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+    
+    if (diffMins < 1) return 'Ahora';
+    if (diffMins < 60) return `Hace ${diffMins} min`;
+    if (diffHours < 24) return `Hace ${diffHours}h`;
+    if (diffDays < 7) return `Hace ${diffDays}d`;
+    
+    return time.toLocaleDateString('es-CL');
   }
 }
 

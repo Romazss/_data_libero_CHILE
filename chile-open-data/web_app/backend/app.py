@@ -8,6 +8,7 @@ API REST completa con base de datos, cache y monitoreo automático
 import os
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
+from flask_socketio import SocketIO
 from datetime import datetime, timezone
 import logging
 
@@ -17,6 +18,8 @@ from services.checker import check_all
 from models import Database
 from cache import cache, cached, invalidate_datasets_cache
 from scheduler import init_scheduler, get_scheduler
+from notifications import notification_manager, create_system_notification
+from websockets import WebSocketManager
 
 
 # Configurar logging
@@ -26,6 +29,12 @@ logger = logging.getLogger(__name__)
 # Crear aplicación Flask
 app = Flask(__name__)
 CORS(app)  # habilita CORS para el frontend
+
+# Configurar SocketIO
+socketio = SocketIO(app, cors_allowed_origins="*", logger=True, engineio_logger=True)
+
+# Inicializar WebSocket Manager
+ws_manager = WebSocketManager(socketio)
 
 # Configuración
 app.config['DATABASE_PATH'] = os.getenv('DATABASE_PATH', 'data/chile_data.db')
@@ -282,6 +291,108 @@ def not_found(error):
     return jsonify({"error": "Endpoint not found"}), 404
 
 
+# === ENDPOINTS DE NOTIFICACIONES ===
+
+@app.route("/api/notifications")
+def get_notifications():
+    """Obtiene las notificaciones recientes"""
+    try:
+        limit = request.args.get('limit', 50, type=int)
+        notifications = notification_manager.get_notifications(limit)
+        unread_count = notification_manager.get_unread_count()
+        
+        return jsonify({
+            "notifications": notifications,
+            "unread_count": unread_count,
+            "total": len(notifications)
+        })
+    except Exception as e:
+        logger.error(f"Error getting notifications: {e}")
+        return jsonify({"error": "Failed to get notifications"}), 500
+
+
+@app.route("/api/notifications/<notification_id>/read", methods=["POST"])
+def mark_notification_read(notification_id):
+    """Marca una notificación como leída"""
+    try:
+        success = notification_manager.mark_as_read(notification_id)
+        unread_count = notification_manager.get_unread_count()
+        
+        if success:
+            # Notificar via WebSocket
+            ws_manager.socketio.emit('notification_marked_read', {
+                'notification_id': notification_id,
+                'unread_count': unread_count
+            }, room='general')
+            
+            return jsonify({
+                "success": True,
+                "unread_count": unread_count
+            })
+        else:
+            return jsonify({"error": "Notification not found"}), 404
+    except Exception as e:
+        logger.error(f"Error marking notification as read: {e}")
+        return jsonify({"error": "Failed to mark notification as read"}), 500
+
+
+@app.route("/api/notifications/clear", methods=["POST"])
+def clear_notifications():
+    """Limpia todas las notificaciones"""
+    try:
+        notification_manager.clear_notifications()
+        
+        # Notificar via WebSocket
+        ws_manager.socketio.emit('notifications_cleared', room='general')
+        
+        return jsonify({"success": True, "message": "All notifications cleared"})
+    except Exception as e:
+        logger.error(f"Error clearing notifications: {e}")
+        return jsonify({"error": "Failed to clear notifications"}), 500
+
+
+@app.route("/api/notifications/test", methods=["POST"])
+def create_test_notification():
+    """Crea una notificación de prueba (solo para desarrollo)"""
+    try:
+        data = request.get_json() or {}
+        notification_type = data.get('type', 'info')
+        title = data.get('title', 'Notificación de prueba')
+        message = data.get('message', 'Esta es una notificación de prueba generada desde la API')
+        
+        notification = create_system_notification(
+            title=title,
+            message=message,
+            notification_type=notification_type,
+            data={'test': True, 'created_via': 'api'}
+        )
+        
+        return jsonify({
+            "success": True,
+            "notification": notification.to_dict()
+        })
+    except Exception as e:
+        logger.error(f"Error creating test notification: {e}")
+        return jsonify({"error": "Failed to create test notification"}), 500
+
+
+# === ENDPOINTS DE WEBSOCKETS STATUS ===
+
+@app.route("/api/websockets/status")
+def websocket_status():
+    """Estado de las conexiones WebSocket"""
+    try:
+        client_info = ws_manager.get_client_info()
+        return jsonify({
+            "websocket_enabled": True,
+            "connected_clients": client_info['total_clients'],
+            "clients_info": client_info['clients']
+        })
+    except Exception as e:
+        logger.error(f"Error getting WebSocket status: {e}")
+        return jsonify({"error": "Failed to get WebSocket status"}), 500
+
+
 @app.errorhandler(500)
 def internal_error(error):
     return jsonify({"error": "Internal server error"}), 500
@@ -315,5 +426,14 @@ if __name__ == "__main__":
     port = int(os.getenv('BACKEND_PORT', '5001'))
     debug = os.getenv('FLASK_DEBUG', 'true').lower() == 'true'
     
-    logger.info(f"Iniciando servidor en {host}:{port} (debug={debug})")
-    app.run(host=host, port=port, debug=debug)
+    logger.info(f"Iniciando servidor con WebSockets en {host}:{port} (debug={debug})")
+    
+    # Crear notificación de inicio del sistema
+    create_system_notification(
+        title="Sistema Iniciado",
+        message=f"El servidor se ha iniciado correctamente en {host}:{port}",
+        notification_type="success"
+    )
+    
+    # Usar SocketIO en lugar de app.run() para soporte de WebSockets
+    socketio.run(app, host=host, port=port, debug=debug)
