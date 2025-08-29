@@ -850,20 +850,24 @@ class ChileDataApp {
       this.showAnalyticsLoading();
       
       // Cargar métricas principales
-      const systemMetrics = await this.fetchAPI(`/api/analytics/system-metrics?hours=${period}`);
-      this.updateSystemMetrics(systemMetrics);
+      const systemMetrics = await this.apiCall(`/api/analytics/system-metrics?hours=${period}`);
+      const systemData = await systemMetrics.json();
+      this.updateSystemMetrics(systemData);
       
       // Cargar top datasets
-      const topDatasets = await this.fetchAPI(`/api/analytics/top-datasets?hours=${period}`);
-      this.updateTopDatasets(topDatasets);
+      const topDatasets = await this.apiCall(`/api/analytics/top-datasets?hours=${period}`);
+      const topData = await topDatasets.json();
+      this.updateTopDatasets(topData);
       
       // Cargar datasets problemáticos
-      const problematicDatasets = await this.fetchAPI(`/api/analytics/problematic-datasets?hours=${period}`);
-      this.updateProblematicDatasets(problematicDatasets);
+      const problematicDatasets = await this.apiCall(`/api/analytics/problematic-datasets?hours=${period}`);
+      const problematicData = await problematicDatasets.json();
+      this.updateProblematicDatasets(problematicData);
       
       // Cargar analytics por categoría
-      const categoryAnalytics = await this.fetchAPI(`/api/analytics/category-analytics?hours=${period}`);
-      this.updateCategoryAnalytics(categoryAnalytics);
+      const categoryAnalytics = await this.apiCall(`/api/analytics/category-analytics?hours=${period}`);
+      const categoryData = await categoryAnalytics.json();
+      this.updateCategoryAnalytics(categoryData);
       
     } catch (error) {
       console.error('Error cargando analytics:', error);
@@ -995,13 +999,14 @@ class ChileDataApp {
       this.analyticsElements.generateReportBtn.textContent = 'Generando...';
       
       const period = this.analyticsElements.period.value;
-      const response = await this.fetchAPI(`/api/reports/generate-custom?hours=${period}`);
+      const response = await this.apiCall(`/api/reports/generate-custom?hours=${period}`);
+      const data = await response.json();
       
       this.showSuccess('Reporte generado exitosamente');
       
       // Crear enlace de descarga
       const link = document.createElement('a');
-      link.href = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(response, null, 2))}`;
+      link.href = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(data, null, 2))}`;
       link.download = `analytics-report-${new Date().toISOString().slice(0, 10)}.json`;
       link.click();
       
@@ -1022,13 +1027,14 @@ class ChileDataApp {
       button.disabled = true;
       button.textContent = 'Generando...';
       
-      const response = await this.fetchAPI(`/api/reports/generate-${type}`);
+      const response = await this.apiCall(`/api/reports/generate-${type}`);
+      const data = await response.json();
       
       this.showSuccess(`Reporte ${type === 'daily' ? 'diario' : 'semanal'} generado exitosamente`);
       
       // Crear enlace de descarga
       const link = document.createElement('a');
-      link.href = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(response, null, 2))}`;
+      link.href = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(data, null, 2))}`;
       link.download = `${type}-report-${new Date().toISOString().slice(0, 10)}.json`;
       link.click();
       
@@ -1048,11 +1054,12 @@ class ChileDataApp {
       this.analyticsElements.exportBtn.textContent = 'Exportando...';
       
       const period = this.analyticsElements.period.value;
-      const response = await this.fetchAPI(`/api/analytics/export?hours=${period}&format=csv`);
+      const response = await this.apiCall(`/api/analytics/export?hours=${period}&format=csv`);
+      const data = await response.json();
       
       // Crear enlace de descarga CSV
       const link = document.createElement('a');
-      link.href = `data:text/csv;charset=utf-8,${encodeURIComponent(response.csv_data)}`;
+      link.href = `data:text/csv;charset=utf-8,${encodeURIComponent(data.csv_data)}`;
       link.download = `analytics-export-${new Date().toISOString().slice(0, 10)}.csv`;
       link.click();
       

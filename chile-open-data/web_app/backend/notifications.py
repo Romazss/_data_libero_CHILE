@@ -1,7 +1,7 @@
 """
 Sistema de notificaciones en tiempo real con WebSockets
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, asdict
 import json
@@ -33,6 +33,30 @@ class NotificationManager:
         self._notifications: List[Notification] = []
         self._subscribers: List[callable] = []
         self._max_notifications = 100  # Límite de notificaciones en memoria
+        
+        # Configurar limpieza automática cada 1 hora
+        import threading
+        import time
+        
+        def cleanup_worker():
+            while True:
+                time.sleep(3600)  # 1 hora
+                self._cleanup_old_notifications()
+        
+        self._cleanup_thread = threading.Thread(target=cleanup_worker, daemon=True)
+        self._cleanup_thread.start()
+        
+    def _cleanup_old_notifications(self):
+        """Limpia notificaciones antiguas (más de 7 días)"""
+        cutoff_time = datetime.now() - timedelta(days=7)
+        before_count = len(self._notifications)
+        self._notifications = [
+            notif for notif in self._notifications 
+            if notif.timestamp > cutoff_time
+        ]
+        cleaned = before_count - len(self._notifications)
+        if cleaned > 0:
+            logger.info(f"Limpiadas {cleaned} notificaciones antiguas")
         
     def add_subscriber(self, callback: callable):
         """Añade un callback que se ejecutará cuando haya nuevas notificaciones"""

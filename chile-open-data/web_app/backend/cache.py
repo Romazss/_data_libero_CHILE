@@ -62,6 +62,16 @@ class SimpleCache:
         for key in expired_keys:
             del self._cache[key]
         
+        # Limpieza automática si el cache está muy grande
+        if len(self._cache) > 1000:  # Límite de seguridad
+            # Ordenar por timestamp y mantener solo los 500 más recientes
+            sorted_items = sorted(
+                self._cache.items(), 
+                key=lambda x: x[1]['created_at'], 
+                reverse=True
+            )
+            self._cache = dict(sorted_items[:500])
+        
         return len(expired_keys)
     
     def stats(self) -> Dict:

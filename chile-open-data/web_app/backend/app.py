@@ -22,6 +22,7 @@ from notifications import notification_manager, create_system_notification
 from websockets import WebSocketManager
 from analytics import AnalyticsEngine
 from reports import ReportGenerator, ScheduledReporter
+from error_handlers import safe_api_call, APIError
 
 
 # Configurar logging

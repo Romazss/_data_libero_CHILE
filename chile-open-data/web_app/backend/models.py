@@ -94,7 +94,11 @@ class Database:
             # Índices para mejor performance
             conn.execute("CREATE INDEX IF NOT EXISTS idx_dataset_status_dataset_id ON dataset_status (dataset_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_dataset_status_checked_at ON dataset_status (checked_at)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_dataset_status_status ON dataset_status (status)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_dataset_status_category ON dataset_status (category)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_dataset_status_dataset_checked ON dataset_status (dataset_id, checked_at)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_datasets_category ON datasets (category)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_datasets_active ON datasets (active)")
             
             conn.commit()
     

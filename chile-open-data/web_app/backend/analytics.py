@@ -116,12 +116,13 @@ class AnalyticsEngine:
                 most_problematic = max(category_problems.items(), key=lambda x: x[1])[0] if category_problems else "Ninguna"
                 
                 # Calcular uptime y reliability
-                total_checks = basic_metrics['total_checks'] or 1
+                total_checks = max(basic_metrics['total_checks'] or 0, 1)  # Evitar división por cero
                 successful_checks = basic_metrics['successful_checks'] or 0
                 uptime_percentage = (successful_checks / total_checks) * 100
                 
-                # Reliability score (combina uptime y latencia)
-                latency_penalty = min(basic_metrics['avg_latency'] / 1000, 20)  # Max 20 points penalty
+                # Reliability score (combina uptime y latencia) - Protegido contra división por cero
+                avg_latency = basic_metrics['avg_latency'] or 0
+                latency_penalty = min(avg_latency / 1000, 20) if avg_latency > 0 else 0  # Max 20 points penalty
                 reliability_score = max(0, uptime_percentage - latency_penalty)
                 
                 return AnalyticsMetrics(
