@@ -6,7 +6,7 @@ API REST completa con base de datos, cache y monitoreo automático
 """
 
 import os
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, g
 from flask_cors import CORS
 from flask_socketio import SocketIO
 from datetime import datetime, timezone
@@ -23,6 +23,8 @@ from websockets import WebSocketManager
 from analytics import AnalyticsEngine
 from reports import ReportGenerator, ScheduledReporter
 from error_handlers import safe_api_call, APIError
+from auth import require_api_key, optional_api_key, api_key_manager
+from developer_portal import developer_bp
 
 
 # Configurar logging
@@ -52,6 +54,9 @@ db = Database(app.config['DATABASE_PATH'])
 analytics_engine = AnalyticsEngine(db)
 report_generator = ReportGenerator(db, analytics_engine)
 scheduled_reporter = ScheduledReporter(db)
+
+# Registrar blueprint del portal de desarrolladores
+# app.register_blueprint(developer_bp)  # Temporalmente comentado para pruebas
 
 # Inicializar scheduler si está habilitado
 if app.config['MONITOR_ENABLED']:
@@ -404,6 +409,7 @@ def websocket_status():
 # === ENDPOINTS DE ANALYTICS ===
 
 @app.route("/api/analytics/metrics")
+@optional_api_key
 def get_analytics_metrics():
     """Obtiene métricas de analytics del sistema"""
     try:
@@ -421,6 +427,7 @@ def get_analytics_metrics():
 
 
 @app.route("/api/analytics/categories")
+@optional_api_key  
 def get_category_analytics():
     """Obtiene analytics por categoría"""
     try:
@@ -457,6 +464,7 @@ def get_timeline_analytics():
 
 
 @app.route("/api/analytics/datasets/top")
+@optional_api_key
 def get_top_datasets():
     """Obtiene los datasets con mejor rendimiento"""
     try:
@@ -476,6 +484,7 @@ def get_top_datasets():
 
 
 @app.route("/api/analytics/datasets/problematic")
+@optional_api_key
 def get_problematic_datasets():
     """Obtiene los datasets con más problemas"""
     try:
@@ -600,7 +609,23 @@ def download_report(filename):
         return jsonify({"error": "File not found"}), 404
 
 
-@app.errorhandler(500)
+# =============================================================================
+# ENDPOINTS DE API PÚBLICA (Requieren API Key) - TEMPORALMENTE COMENTADO
+# =============================================================================
+
+# Endpoints comentados temporalmente para resolver conflictos de decoradores
+# TODO: Resolver conflictos en auth.py y habilitar nuevamente
+
+# @app.route("/api/v1/datasets", methods=['GET'])
+# @require_api_key
+# @safe_api_call
+# def api_get_datasets():
+#     """API Pública: Obtener lista de datasets con autenticación"""
+#     ...código comentado...
+
+# =============================================================================
+# ERROR HANDLERS
+# =============================================================================
 def internal_error(error):
     return jsonify({"error": "Internal server error"}), 500
 

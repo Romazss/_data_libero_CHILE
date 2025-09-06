@@ -1,5 +1,5 @@
 # Fuentes de datos abiertos de Chile
-# Configuración inicial para pruebas de la Fase 1
+# Archivo unificado para pruebas y expansión del proyecto
 
 datasets:
   - id: "bcentral_pib"
@@ -9,7 +9,7 @@ datasets:
     description: "Producto Interno Bruto trimestral de Chile"
     method: "HEAD"
     timeout: 10
-    
+
   - id: "ine_censo"
     name: "Censo de Población y Vivienda - INE"
     category: "demografía"
@@ -17,7 +17,7 @@ datasets:
     description: "Datos del Censo Nacional de Población y Vivienda"
     method: "HEAD"
     timeout: 8
-    
+
   - id: "deis_defunciones"
     name: "Defunciones por Causas - DEIS MINSAL"
     category: "salud"
@@ -25,7 +25,7 @@ datasets:
     description: "Estadísticas de defunciones por causas básicas de muerte"
     method: "HEAD"
     timeout: 10
-    
+
   - id: "mineduc_matriculas"
     name: "Matrícula Estudiantil - MINEDUC"
     category: "educación"
@@ -33,11 +33,91 @@ datasets:
     description: "Estadísticas de matrícula del sistema educacional chileno"
     method: "HEAD"
     timeout: 8
-    
+
   - id: "dt_empleo"
     name: "Encuesta Nacional de Empleo - Ministerio del Trabajo"
     category: "trabajo"
     url: "https://www.dt.gob.cl/portal/1626/w3-propertyvalue-22924.html"
     description: "Datos de empleo, desempleo y condiciones laborales"
+    method: "HEAD"
+    timeout: 10
+
+  - id: "datos_gob_cl"
+    name: "Portal Nacional de Datos Abiertos"
+    category: "gobierno"
+    url: "https://www.datos.gob.cl"
+    description: "Catálogo oficial de datos abiertos del Gobierno de Chile"
+    method: "HEAD"
+    timeout: 12
+
+  - id: "bidat_mds"
+    name: "BIDAT - Ministerio de Desarrollo Social y Familia"
+    category: "social"
+    url: "https://bidat.gob.cl/datos-abiertos"
+    description: "Datos sociales: vulnerabilidad socioterritorial, Registro Social de Hogares, pobreza comunal"
+    method: "HEAD"
+    timeout: 12
+
+  - id: "chilecompra_datos_abiertos"
+    name: "Datos Abiertos - ChileCompra"
+    category: "gobierno"
+    url: "https://www.chilecompra.cl/datos-abiertos/"
+    description: "Datos sobre compras públicas, licitaciones y proveedores"
+    method: "HEAD"
+    timeout: 12
+
+  - id: "ine_portal_estadisticas"
+    name: "Portal Estadísticas INE"
+    category: "estadísticas"
+    url: "https://www.ine.cl/estadisticas"
+    description: "Estadísticas oficiales: IPC, empleo, censos y precios"
+    method: "HEAD"
+    timeout: 10
+
+  - id: "datachile_platform"
+    name: "Plataforma DataChile"
+    category: "plataformas"
+    url: "https://datachile.io"
+    description: "Plataforma de integración y visualización de datos públicos de Chile"
+    method: "HEAD"
+    timeout: 10
+
+  - id: "geosur_mde"
+    name: "GeoSUR - Modelos Digitales de Elevación"
+    category: "geoespacial"
+    url: "https://www.geosur.info/geosur/index.html"
+    description: "Modelos digitales de elevación y geoprocesamiento para América Latina"
+    method: "HEAD"
+    timeout: 15
+
+  - id: "gobcl_estandares"
+    name: "Estándares de Datos Abiertos"
+    category: "normativa"
+    url: "https://wikiguias.digital.gob.cl/Est%C3%A1ndares/Datos-Abiertos"
+    description: "Guía oficial de estándares de publicación de datos abiertos en Chile"
+    method: "HEAD"
+    timeout: 8
+
+  - id: "cmf_datos_financieros"
+    name: "Comisión para el Mercado Financiero - Datos"
+    category: "finanzas"
+    url: "https://www.cmfchile.cl/portal/estadisticas/"
+    description: "Estadísticas del sistema financiero chileno"
+    method: "HEAD"
+    timeout: 10
+
+  - id: "sernac_reclamos"
+    name: "SERNAC - Portal de Reclamos"
+    category: "consumidor"
+    url: "https://www.sernac.cl/portal/619/w3-channel.html"
+    description: "Datos de reclamos y tendencias de consumo"
+    method: "HEAD"
+    timeout: 10
+
+  - id: "sii_estadisticas"
+    name: "Servicio de Impuestos Internos - Estadísticas"
+    category: "tributaria"
+    url: "https://www.sii.cl/sobre_el_sii/estadisticas.html"
+    description: "Estadísticas tributarias y de recaudación"
     method: "HEAD"
     timeout: 10

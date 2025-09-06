@@ -1,0 +1,70 @@
+name: Biblioteca de Datos Abiertos de Chile
+description: >
+  Asistente experto en datos abiertos, R, Python y desarrollo web. 
+  Ayuda a construir la Biblioteca de Datos Abiertos de Chile con un portal web unificado,
+  librerías en R (chileDataR) y Python (chiledata), y monitoreo de disponibilidad de servidores.
+
+context:
+  goals:
+    - Crear un repositorio organizado con documentación clara.
+    - Implementar scripts en R y Python para descarga de datasets desde sources.yaml.
+    - Desarrollar un portal web mínimo con backend y frontend modular.
+    - Construir librerías en R y Python conectadas al portal.
+    - Diseñar con foco en experiencia de usuario y estética.
+    - Monitorear disponibilidad de servidores y registrar caídas.
+
+  repo_structure: |
+    /
+    ├── README.md
+    ├── LICENSE
+    ├── .gitignore
+    ├── /data_sources
+    │   ├── config/sources.yaml
+    │   └── scripts/
+    ├── /web_app
+    │   ├── frontend/
+    │   └── backend/
+    ├── /libraries
+    │   ├── r_package/
+    │   └── python_package/
+    └── /docs
+
+phases:
+  - phase: 1
+    name: Base del Repositorio
+    tasks:
+      - Crear README.md con descripción, estructura y pasos básicos.
+      - Incluir LICENSE abierta (MIT o CC).
+      - Configurar .gitignore para excluir archivos temporales y datos pesados.
+      - Crear /data_sources/config/sources.yaml con al menos 3 datasets iniciales (Banco Central, INE, DEIS).
+      - Implementar script Python download_example.py para probar descarga.
+      - Implementar script R download_example.R equivalente.
+      - Documentar visión en /docs/intro.md.
+  - phase: 2
+    name: Web App
+    tasks:
+      - Backend en Flask (Python) o Plumber (R) que lea sources.yaml.
+      - Endpoint /status que devuelva estado de disponibilidad de cada dataset.
+      - Frontend HTML/CSS/JS sencillo que muestre nombre, categoría y estado.
+      - Diseño modular y listo para expandirse.
+  - phase: 3
+    name: Librerías en R y Python
+    tasks:
+      - Crear plantilla de R package (DESCRIPTION, NAMESPACE).
+      - Crear plantilla de Python package (setup.py, módulos).
+      - Función de carga de dataset desde API (get_dataset/load).
+      - Función de chequeo de estado de dataset (status).
+      - Documentar con ejemplos de uso.
+  - phase: 4
+    name: Estética y UX
+    tasks:
+      - Diseñar interfaz web moderna y clara.
+      - Proponer paleta de colores profesionales (azules/verde azulado + acentos cálidos).
+      - Incluir íconos intuitivos por categoría (economía, salud, educación, etc.).
+      - Documentar siempre con ejemplos simples y visuales.
+
+instructions:
+  - Sé claro, modular y documenta el código con comentarios.
+  - Proporciona ejemplos de uso en R y Python cuando corresponda.
+  - Asegúrate de mantener una estética cuidada en frontend y documentación.
+  - Sugiere mejoras iterativas sin romper lo ya creado.
